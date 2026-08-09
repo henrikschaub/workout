@@ -3505,6 +3505,321 @@ if (typeof G._generateWorkoutProgram === 'function') {
   check('Shoulder-injury cuff block no longer injects Face Pulls', _cuffFP === false);
 }
 
+// ── Pull-ups lead every pull day ───────────────────────────────────────────────
+// Rule (2026-08-08). Henrik: "In no Pull program should any exercise be before Pull-ups."
+// Regression: the seeded "6-Day Hypertrophy — Upper" Day 2 — Pull A opened with Barbell Row
+// and put Pull-ups second.
+console.log('\n── Pull-ups lead every pull day ───────────────────────────');
+check('isPullUpEx defined', typeof G.isPullUpEx === 'function');
+if (typeof G.isPullUpEx === 'function') {
+  check('"Pull-ups" → true',            G.isPullUpEx('Pull-ups'));
+  check('"Weighted Pull-ups" → true',   G.isPullUpEx('Weighted Pull-ups'));
+  check('"Chin-ups" → true',            G.isPullUpEx('Chin-ups'));
+  check('"Lat Pulldown" → false',       !G.isPullUpEx('Lat Pulldown'));
+  check('"Face Pulls" → false',         !G.isPullUpEx('Face Pulls'));
+  check('"Barbell Row" → false',        !G.isPullUpEx('Barbell Row'));
+  check('"Push-ups" → false',           !G.isPullUpEx('Push-ups'));
+}
+if (typeof G._isPullDay === 'function') {
+  check('_isPullDay("Day 2 — Pull A") → true',            G._isPullDay('Day 2 — Pull A'));
+  check('_isPullDay("Day 4 — Upper Pull") → true',        G._isPullDay('Day 4 — Upper Pull'));
+  check('_isPullDay("Day 5 — Vertical Push/Pull") → false', !G._isPullDay('Day 5 — Vertical Push/Pull'));
+  check('_isPullDay("Day 3 — Lower Pull") → false',       !G._isPullDay('Day 3 — Lower Pull'));
+  check('_isPullDay("Day 2 — Full Body B") → false',      !G._isPullDay('Day 2 — Full Body B'));
+}
+// Seed program: Pull A opens with Pull-ups
+if (typeof G._seedHypertrophyProgram === 'function') {
+  const _seed = G._seedHypertrophyProgram();
+  const _pullDays = (_seed.days || []).filter(d => typeof G._isPullDay === 'function' && G._isPullDay(d.name));
+  check('Seed program has pull days', _pullDays.length > 0);
+  const _seedBad = _pullDays.filter(d => {
+    const i = (d.exercises || []).findIndex(e => G.isPullUpEx(e.name));
+    return i > 0;
+  });
+  check('Seeded pull days open with a pull-up variant',
+    _seedBad.length === 0, _seedBad.map(d => d.name + ': ' + d.exercises[0].name).join(' | '));
+}
+// Generator: no exercise may precede a pull-up variant on a pull day, across the catalogue
+if (typeof G._generateWorkoutProgram === 'function') {
+  const _combos = [['strength','pure'],['strength','hybrid'],['hypertrophy','balanced'],
+    ['hypertrophy','upper'],['hypertrophy','lower'],['aesthetic','fullbody'],['aesthetic','upperlower'],
+    ['rehab','shoulder'],['rehab','back'],['rehab','knee']];
+  const _nd = { strength:[3,4,5,6], hypertrophy:[3,4,5,6,7], aesthetic:[3,5], rehab:[6] };
+  const _bad = [];
+  const _seenPullDay = [];
+  _combos.forEach(([g,s]) => _nd[g].forEach(n => [[],['shoulders']].forEach(inj =>
+    [9,16,25].forEach(spm => {
+      const p = G._generateWorkoutProgram(g, s, n, 'T', spm, inj);
+      (p.days || []).forEach(d => {
+        if (!G._isPullDay(d.name)) return;
+        const i = (d.exercises || []).findIndex(e => G.isPullUpEx(e.name));
+        if (i < 0) return;
+        _seenPullDay.push(`${g}-${s}-${n}`);
+        if (i > 0) _bad.push(`${g}-${s}-${n}/${spm}/${inj.join('')}: ${d.name} → ${d.exercises[0].name}`);
+      });
+    }))));
+  check('Generated pull days carrying a pull-up variant exist (sweep is meaningful)',
+    _seenPullDay.length > 0);
+  check('No exercise is scheduled before Pull-ups on any generated pull day',
+    _bad.length === 0, _bad.slice(0, 5).join(' | '));
+  // The guard must not reorder days that are NOT pull days — a heavy lower lift keeps its
+  // opening slot on full-body days that happen to carry Pull-ups.
+  const _fb = G._generateWorkoutProgram('hypertrophy','balanced',4,'T',16,[]);
+  const _fbMoved = (_fb.days || []).filter(d => !G._isPullDay(d.name)
+    && (d.exercises || []).some(e => G.isPullUpEx(e.name))
+    && G.isPullUpEx(d.exercises[0].name));
+  check('Full-body days carrying Pull-ups are NOT reordered by the pull-day guard',
+    _fbMoved.length === 0, _fbMoved.map(d => d.name).join(' | '));
+}
+
+// ── Body weight never follows a card onto a loaded lift ────────────────────────
+// Henrik, 2026-08-08: "I never used 89kg on barbell rows (nor is it possible in reality)."
+// 89 kg was his BODY WEIGHT. A bodyweight card's kg boxes are prefilled with body weight (that
+// is how pull-up volume gets counted), and the ⇄ swap only renamed the card — the stale number
+// stayed in the boxes, so saveLog stored it as the NEW exercise's remembered weight and logged
+// a set at a weight that was never lifted.
+console.log('\n── Body weight never follows a swapped card ───────────────');
+const _mkCard = (kgVals, bw) => {
+  const inputs = kgVals.map(v => ({ value: v, dataset: { type: 'kg' } }));
+  return {
+    _inputs: inputs,
+    dataset: bw ? { bw: '1' } : {},
+    querySelectorAll: () => inputs,
+  };
+};
+check('_swapResetWeights defined', typeof G._swapResetWeights === 'function');
+if (typeof G._swapResetWeights === 'function') {
+  // Pull-ups (body weight in the boxes) → Barbell Row: boxes cleared, card no longer bodyweight
+  const c1 = _mkCard(['89', '89', '89', '89'], true);
+  G._swapResetWeights(c1, 'Barbell Row');
+  check('swap to a loaded lift clears every kg box',
+    c1._inputs.every(i => i.value === ''), JSON.stringify(c1._inputs.map(i => i.value)));
+  check('swap to a loaded lift drops data-bw (so _refreshBWPrefill stops re-filling it)',
+    c1.dataset.bw === undefined, String(c1.dataset.bw));
+  // Loaded lift → Pull-ups: boxes cleared and the card becomes a bodyweight card again
+  const c2 = _mkCard(['80', '80', '80'], false);
+  G._swapResetWeights(c2, 'Pull-ups');
+  check('swap to a bodyweight lift clears the old load', c2._inputs.every(i => i.value === ''));
+  check('swap to a bodyweight lift marks the card data-bw', c2.dataset.bw === '1');
+  // Weighted Pull-ups is NOT a bodyweight card — its kg box is ADDED weight
+  const c3 = _mkCard(['15'], true);
+  G._swapResetWeights(c3, 'Weighted Pull-ups');
+  check('Weighted Pull-ups is not treated as a bodyweight card', c3.dataset.bw === undefined);
+  check('a null card is a no-op, not a throw', (() => {
+    try { G._swapResetWeights(null, 'Pull-ups'); return true; } catch (e) { return false; }
+  })());
+}
+// The swap handler must call it — a clear that is never invoked fixes nothing
+{
+  const _swapFn = String(G.swapExercise || '');
+  check('swapExercise clears the weights on swap',
+    _swapFn.includes('_swapResetWeights(card,this.value)'));
+  check('…before _refreshCardGearBtns re-fills body weight for a bodyweight target',
+    _swapFn.indexOf('_swapResetWeights') < _swapFn.indexOf('_refreshCardGearBtns'));
+}
+// saveLog must not invent a remembered weight
+{
+  const _saveFn = String(G.saveLog || '');
+  check('saveLog only remembers a weight from a set that was actually logged',
+    _saveFn.includes('if(kg>0&&reps>0)lastKg=kg'));
+  check('saveLog never stores a bodyweight card\'s prefill as a template weight',
+    /_bwCard/.test(_saveFn) && _saveFn.includes('lastKg!==null&&!_bwCard'));
+  check('the bodyweight test falls back to the name when the card is gone',
+    _saveFn.includes("isBWExName(ex.name))&&!_isWPU"));
+}
+// The body-weight refill helpers must agree on the display unit — _refreshCardGearBtns wrote a
+// raw kg number into a lb field, and clearing on swap makes that path reachable every swap.
+{
+  const _gearFn = String(G._refreshCardGearBtns || '');
+  check('_refreshCardGearBtns fills body weight in the DISPLAY unit',
+    _gearFn.includes('inp.value=kgToUnit(_bw)'));
+  check('_refreshCardGearBtns still only fills EMPTY boxes (never overwrites a typed weight)',
+    _gearFn.includes("if(inp.value==='')"));
+}
+
+// ── Progress → Exercise tab ───────────────────────────────────────────────────
+// Henrik, 2026-08-08: "Add an Exercise tab to Progress, where Volume and Strength per
+// exercise is presented in the same way as Volume and Strength for muscle groups."
+console.log('\n── Progress → Exercise tab ────────────────────────────────');
+check('Exercise tab button exists', /id="ptab-exercise"[^>]*onclick="showProgressTab\('exercise',this\)"/.test(html));
+check('Exercise panel exists',      /id="ppanel-exercise"/.test(html));
+check('…with a Volume canvas',      /id="exp-chart-vol"/.test(html));
+check('…and an Est. 1RM canvas',    /id="exp-chart-str"/.test(html));
+check('…and the same 30/60/90/All windows as the group tabs',
+  ['30','60','90','36500'].every(d => html.includes('id="exp-btn-' + d + '"')));
+check('…and the same Sessions/Weekly toggle',
+  html.includes('id="expv-btn-sessions"') && html.includes('id="expv-btn-weekly"'));
+check('…and an exercise picker', /id="exp-select"/.test(html));
+{
+  const _spt = String(G.showProgressTab || '');
+  check('showProgressTab renders the Exercise tab', _spt.includes("name==='exercise'") && _spt.includes('renderExerciseCharts()'));
+  check('the Zoomed/Absolute row shows on Exercise (it carries a 1RM chart)',
+    /\['volume','strength','exercise'\]/.test(_spt));
+  check('setChartScale redraws the Exercise tab',
+    String(G.setChartScale || '').includes("tab==='exercise'"));
+}
+check('.exp-btn shares the group window-button styling', /\.vol-btn,\.str-btn,\.exp-btn,\.wt-btn\{/.test(html));
+
+if (typeof G.buildSessionExVol === 'function') {
+  const _sw = G.weights, _sl = G.logs;
+  G.weights = [{ date: '2020-01-01', weight: 90 }];
+  G.logs = [
+    { date: '2030-01-06', exercises: [
+      { name: 'Barbell Row', sets: [{ kg: 100, reps: 10 }, { kg: 100, reps: 5 }] },
+      { name: 'Lat Pulldown', sets: [{ kg: 60, reps: 10 }] },
+    ]},
+    { date: '2030-01-13', exercises: [
+      { name: 'Barbell Row', sets: [{ kg: 110, reps: 8 }] },
+    ]},
+  ];
+  const _big = 3650000; // window wide enough that fixed dates are always inside it
+
+  // Volume — the exercise is itself, so NO split fraction is applied. Barbell Row is
+  // back 0.7 / arms 0.3, so a group series would read 700, not 1000.
+  const _v = G.buildSessionExVol('Barbell Row', _big);
+  check('buildSessionExVol returns one entry per session with that exercise',
+    _v.length === 2, JSON.stringify(_v));
+  check('…volume is the exercise\'s own, unscaled by any muscle split (100×10 + 100×5 = 1500)',
+    _v[0] && _v[0].vol === 1500, _v[0] && String(_v[0].vol));
+  check('…and it ignores other exercises in the same session',
+    G.buildSessionExVol('Lat Pulldown', _big).length === 1);
+  check('…an exercise never logged yields an empty series',
+    G.buildSessionExVol('Zercher Squat', _big).length === 0);
+  // The group builder still applies its fraction — the two views are genuinely different
+  check('the muscle-group builder still scales by the split (unchanged)',
+    G.buildSessionGroupVol('back', _big)[0].vol < _v[0].vol);
+
+  // Strength — best set, Epley, unscaled
+  const _s = G.buildSessionExStrength('Barbell Row', _big);
+  check('buildSessionExStrength takes the best set (100kg×10 → 100×(1+10/30) = 133.3)',
+    _s[0] && Math.abs(_s[0].est1rm - 100 * (1 + 10 / 30)) < 0.01, _s[0] && String(_s[0].est1rm));
+  check('…and tracks the later, heavier session',
+    _s[1] && _s[1].est1rm > _s[0].est1rm);
+
+  // Gear factor and the weighted-pull-up body-weight addition, same as the group builders
+  G.logs = [{ date: '2030-01-06', exercises: [
+    { name: 'Weighted Pull-ups', sets: [{ kg: 10, reps: 5 }] },
+  ]}];
+  check('weighted pull-ups add body weight to the load (90+10)×5 = 500',
+    G.buildSessionExVol('Weighted Pull-ups', _big)[0].vol === 500,
+    String(G.buildSessionExVol('Weighted Pull-ups', _big)[0].vol));
+  G.logs = [{ date: '2030-01-06', exercises: [
+    { name: 'Leg Press', gear: 2, sets: [{ kg: 100, reps: 10 }] },
+  ]}];
+  check('the gear factor is applied (100×10×2 = 2000)',
+    G.buildSessionExVol('Leg Press', _big)[0].vol === 2000,
+    String(G.buildSessionExVol('Leg Press', _big)[0].vol));
+
+  // Legacy notes-only logs still resolve to an exercise
+  G.logs = [{ date: '2030-01-06', notes: 'Barbell Row 100kg 10-10\nLat Pulldown 60kg 12-12' }];
+  check('_exLineName reads the name off a legacy notes line',
+    G._exLineName('Barbell Row 100kg 10-10') === 'Barbell Row',
+    G._exLineName('Barbell Row 100kg 10-10'));
+  check('a notes-only log still produces a series', G.buildSessionExVol('Barbell Row', _big).length === 1);
+  check('…reading only its own line (100kg × 20 reps = 2000, not the Lat Pulldown line)',
+    G.buildSessionExVol('Barbell Row', _big)[0].vol === 2000,
+    String(G.buildSessionExVol('Barbell Row', _big)[0].vol));
+  check('…and the other line resolves to its own exercise (60kg × 24 = 1440)',
+    G.buildSessionExVol('Lat Pulldown', _big)[0].vol === 1440,
+    String(G.buildSessionExVol('Lat Pulldown', _big)[0].vol));
+
+  // The picker lists what was actually logged
+  G.logs = [
+    { date: '2030-01-06', exercises: [
+      { name: 'Squat', sets: [{ kg: 100, reps: 5 }] },
+      { name: 'Never Done', sets: [{ kg: 0, reps: 0 }] },
+    ]},
+    { date: '2030-01-13', exercises: [{ name: 'Bench Press', sets: [{ kg: 80, reps: 5 }] }] },
+    { date: '2030-01-20', exercises: [{ name: 'Squat', sets: [{ kg: 105, reps: 5 }] }] },
+  ];
+  const _names = G.logExerciseNames();
+  check('logExerciseNames dedupes and sorts', JSON.stringify(_names) === '["Bench Press","Squat"]', JSON.stringify(_names));
+  check('…and excludes an exercise with no completed reps', _names.indexOf('Never Done') < 0);
+
+  // Weekly views reuse the muscle-group aggregation, not a second copy of it
+  check('buildWeeklyExVol buckets by week', G.buildWeeklyExVol('Squat', _big).length === 2);
+  check('buildWeeklyExStrength buckets by week', G.buildWeeklyExStrength('Squat', _big).length === 2);
+  check('the weekly volume helper is shared with the group tab',
+    typeof G._weeklyFromVolSessions === 'function'
+    && String(G.buildWeeklyGroupVol || '').includes('_weeklyFromVolSessions'));
+  check('the weekly strength helper is shared with the group tab',
+    typeof G._weeklyFromStrSessions === 'function'
+    && String(G.buildWeeklyGroupStrength || '').includes('_weeklyFromStrSessions'));
+  check('the shared weekly helper gives the group tab the same shape as before',
+    (() => { const w = G.buildWeeklyGroupVol('legs', _big);
+      return w.length === 2 && 'weekStart' in w[0] && 'rawVol' in w[0]
+        && 'extrapVol' in w[0] && 'isRecent' in w[0] && 'daysElapsed' in w[0]; })());
+
+  // An exercise is coloured by the muscle group it mostly trains
+  check('_exProgColor: Squat → legs colour',       G._exProgColor('Squat') === G.GROUP_COLORS.legs);
+  check('_exProgColor: Barbell Row → back colour', G._exProgColor('Barbell Row') === G.GROUP_COLORS.back);
+  check('_exProgColor: Bench Press → chest colour',G._exProgColor('Bench Press') === G.GROUP_COLORS.chest);
+  check('_exProgColor falls back for an unknown exercise', typeof G._exProgColor('Nonsense Lift') === 'string');
+
+  // Picker ordered by volume, labelled with est. 1RM (Henrik, 2026-08-08)
+  G.logs = [
+    { date: '2030-01-06', exercises: [
+      { name: 'Ab Wheel',     sets: [{ kg: 10,  reps: 10 }] },                 // 100
+      { name: 'Squat',        sets: [{ kg: 100, reps: 10 }, { kg: 100, reps: 10 }] }, // 2000
+      { name: 'Bench Press',  sets: [{ kg: 80,  reps: 10 }] },                 // 800
+    ]},
+  ];
+  {
+    const _rows = G._exProgRows(_big);
+    check('the picker is ordered by volume, heaviest first',
+      _rows.map(r => r.name).join(',') === 'Squat,Bench Press,Ab Wheel',
+      _rows.map(r => r.name + ':' + r.vol).join(' | '));
+    check('…and each row carries the best est. 1RM in the window',
+      Math.abs(_rows[0].best - 100 * (1 + 10 / 30)) < 0.01, String(_rows[0].best));
+    check('the option label appends the 1RM after the name',
+      G._exProgLabel(_rows[0]) === 'Squat — 133kg', G._exProgLabel(_rows[0]));
+    check('…in the display unit, not raw kg',
+      /^Squat — \d+(kg|lb)$/.test(G._exProgLabel(_rows[0])), G._exProgLabel(_rows[0]));
+    check('an exercise with no 1RM in the window shows the bare name (never "0kg")',
+      G._exProgLabel({ name: 'Plank', vol: 0, best: 0 }) === 'Plank',
+      G._exProgLabel({ name: 'Plank', vol: 0, best: 0 }));
+    check('populateExerciseSelect defaults to the highest-volume exercise',
+      String(G.populateExerciseSelect || '').includes('_exProgRows(expWindow||90)'));
+    check('…and the ordering follows the selected window',
+      String(G._exProgRows || '').includes('buildSessionExVol(n,days)'));
+    // Zero-volume exercises are hidden (Henrik, 2026-08-08: "You can hide exercises
+    // with 0 kg volume") — including one only ever logged without a load.
+    G.logs = [{ date: '2030-01-06', exercises: [
+      { name: 'Squat', sets: [{ kg: 100, reps: 10 }] },
+      { name: 'Plank', sets: [{ kg: 0, reps: 60 }] },
+    ]}];
+    G._expExercise = 'Squat';
+    check('an exercise logged with no load is hidden from the picker',
+      G._exProgRows(_big).map(r => r.name).join(',') === 'Squat',
+      G._exProgRows(_big).map(r => r.name + ':' + r.vol).join(' | '));
+    check('logExerciseNames itself still sees it (only the picker hides it)',
+      G.logExerciseNames().indexOf('Plank') >= 0);
+    // An exercise outside the window is hidden too, but the SELECTED one is kept so the
+    // <select> cannot end up displaying a different name than the charts below it.
+    G.logs = [
+      { date: '2020-01-06', exercises: [{ name: 'Squat', sets: [{ kg: 100, reps: 10 }] }] },
+      { date: '2030-01-06', exercises: [{ name: 'Bench Press', sets: [{ kg: 80, reps: 10 }] }] },
+    ];
+    G._expExercise = 'Bench Press';
+    check('an exercise with no volume in the window is hidden',
+      G._exProgRows(1).map(r => r.name).join(',') === 'Bench Press',
+      G._exProgRows(1).map(r => r.name).join(','));
+    G._expExercise = 'Squat';
+    check('…unless it is the one currently selected',
+      G._exProgRows(1).map(r => r.name).indexOf('Squat') >= 0,
+      G._exProgRows(1).map(r => r.name).join(','));
+    check('…and the selection is not silently moved when the window narrows',
+      (() => { G._expExercise = 'Squat'; G._exProgRows(1); return G._expExercise === 'Squat'; })());
+    G._expExercise = '';
+    // Equal volume falls back to alphabetical so the order does not jitter
+    const _tie = [{ name: 'Zzz', vol: 5, best: 0 }, { name: 'Aaa', vol: 5, best: 0 }]
+      .sort((a, b) => (b.vol - a.vol) || a.name.localeCompare(b.name));
+    check('ties break alphabetically', _tie[0].name === 'Aaa');
+  }
+
+  G.weights = _sw; G.logs = _sl;
+}
+
 // ── Manual program builder (blank, no wizard) ──────────────────────────────────
 console.log('\n── Manual program builder ─────────────────────────────────');
 check('_progBuildManual defined', typeof G._progBuildManual === 'function');
