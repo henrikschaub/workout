@@ -298,7 +298,7 @@
       <div class="chart-wrap">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div class="chart-title" style="margin-bottom:0">Est. 1RM per Muscle Group</div><div style="display:flex;gap:4px"><button onclick="setStrWindow(30)" id="str-btn-30" class="str-btn">30d</button><button onclick="setStrWindow(60)" id="str-btn-60" class="str-btn">60d</button><button onclick="setStrWindow(90)" id="str-btn-90" class="str-btn vol-btn-active">90d</button><button onclick="setStrWindow(36500)" id="str-btn-36500" class="str-btn">All</button></div></div>
         <div style="display:flex;gap:4px;margin-bottom:8px"><div style="display:flex;gap:1px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:2px"><button id="strv-btn-sessions" class="scale-btn" onclick="setStrViewMode('sessions')">Sessions</button><button id="strv-btn-weekly" class="scale-btn scale-btn-active" onclick="setStrViewMode('weekly')">Weekly</button></div></div>
-        <div id="str-subtitle" style="font-size:10px;color:var(--muted);margin-bottom:4px">Bars = best set Epley 1RM estimate · Line = 5-session smoothed trend</div>
+        <div id="str-subtitle" style="font-size:10px;color:var(--muted);margin-bottom:4px">Bars = best set Epley 1RM estimate (sets ≤6 reps) · Line = 5-session smoothed trend</div>
         <div style="display:flex;flex-direction:column;gap:16px;margin-top:4px;">
           <div><div style="font-size:10px;font-weight:600;color:#e8ff3c;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Legs</div><canvas id="str-chart-legs" height="100" style="width:100%"></canvas></div>
           <div style="height:1px;background:var(--border)"></div>
@@ -336,10 +336,11 @@
         <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center"><select id="exp-select" onchange="setExProgExercise(this.value)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-size:13px;font-weight:600;font-family:var(--font-ui);outline:none;cursor:pointer"></select><div style="display:flex;gap:1px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:2px"><button id="expv-btn-sessions" class="scale-btn" onclick="setExpViewMode('sessions')">Sessions</button><button id="expv-btn-weekly" class="scale-btn scale-btn-active" onclick="setExpViewMode('weekly')">Weekly</button></div></div>
         <div id="exp-subtitle" style="font-size:10px;color:var(--muted);margin-bottom:4px">Bars = weekly total &middot; Line = 3-week rolling avg (faded = extrapolated)</div>
         <div id="exp-empty" class="empty hidden" style="padding:24px 0"><div class="empty-icon">📈</div>No logged sets for this exercise yet.</div>
+        <div style="margin-bottom:10px"><button onclick="createOneRmProgram()" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--accent);font-size:12px;font-weight:600;border-radius:8px;padding:8px;cursor:pointer;font-family:var(--font-ui);">+ CREATE 1RM TEST PROGRAM</button><div style="font-size:10px;color:var(--muted);margin-top:4px;text-align:center">3 sessions · warm up, then one top set of 3 · Squat, Bench, Deadlift, Row, Overhead Press, Weighted Pull-ups</div></div>
         <div id="exp-charts" style="display:flex;flex-direction:column;gap:16px;margin-top:4px;">
           <div><div id="exp-lbl-vol" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Volume</div><canvas id="exp-chart-vol" height="100" style="width:100%"></canvas></div>
           <div style="height:1px;background:var(--border)"></div>
-          <div><div id="exp-lbl-str" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Est. 1RM</div><canvas id="exp-chart-str" height="100" style="width:100%"></canvas></div>
+          <div><div id="exp-lbl-str" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Est. 1RM — sets ≤6 reps</div><canvas id="exp-chart-str" height="100" style="width:100%"></canvas></div>
         </div>
       </div>
     </div>
@@ -696,14 +697,14 @@ let volWindow=90;function setVolWindow(days){volWindow=days;document.querySelect
 let _chartScale=getData('wkt-chart-scale','relative');function setChartScale(mode){_chartScale=mode;setData('wkt-chart-scale',mode);pushSettingsToAgent({'wkt-chart-scale':mode});document.querySelectorAll('.scale-btn').forEach(b=>b.classList.remove('scale-btn-active'));const btn=document.getElementById('scale-btn-'+mode);if(btn)btn.classList.add('scale-btn-active');const tab=localStorage.getItem('wkt-progress-tab');if(tab==='weight'){drawChart();drawBfChart();drawBmiChart();drawLbmChart();}else if(tab==='volume')drawVolumeChart();else if(tab==='strength')renderStrengthCharts();else if(tab==='exercise')renderExerciseCharts();}
 var _volViewMode='weekly';function setVolViewMode(m){_volViewMode=m;document.querySelectorAll('[id^="volv-btn-"]').forEach(b=>b.classList.remove('scale-btn-active'));const vb=document.getElementById('volv-btn-'+m);if(vb)vb.classList.add('scale-btn-active');const sub=document.getElementById('vol-subtitle');if(sub)sub.textContent=m==='weekly'?'Bars = weekly total · Line = 3-week rolling avg (faded = extrapolated)':'Bars = session volume · Line = 5-session smoothed trend';drawVolumeChart();}
 let strWindow=90;function setStrWindow(days){strWindow=days;document.querySelectorAll('.str-btn').forEach(b=>b.classList.remove('vol-btn-active'));const btn=document.getElementById('str-btn-'+days);if(btn)btn.classList.add('vol-btn-active');renderStrengthCharts();}
-var _strViewMode='weekly';function setStrViewMode(m){_strViewMode=m;document.querySelectorAll('[id^="strv-btn-"]').forEach(b=>b.classList.remove('scale-btn-active'));const vb=document.getElementById('strv-btn-'+m);if(vb)vb.classList.add('scale-btn-active');const sub=document.getElementById('str-subtitle');if(sub)sub.textContent=m==='weekly'?'Bars = weekly best est. 1RM · Line = 3-week rolling avg':'Bars = best set Epley 1RM estimate · Line = 5-session smoothed trend';renderStrengthCharts();}
+var _strViewMode='weekly';function setStrViewMode(m){_strViewMode=m;document.querySelectorAll('[id^="strv-btn-"]').forEach(b=>b.classList.remove('scale-btn-active'));const vb=document.getElementById('strv-btn-'+m);if(vb)vb.classList.add('scale-btn-active');const sub=document.getElementById('str-subtitle');if(sub)sub.textContent=m==='weekly'?'Bars = weekly best est. 1RM (sets ≤6 reps) · Line = 3-week rolling avg':'Bars = best set Epley 1RM estimate (sets ≤6 reps) · Line = 5-session smoothed trend';renderStrengthCharts();}
 // 36500 (~100 years) is the "All" window. Every chart window here is a plain day
 // count fed to a date cutoff (X||90), so showing everything just means a window
 // wider than any log can be — no special-casing in the drawing code.
 const WINDOW_ALL=36500;
 let _weightWindow=90;function setWeightWindow(days){_weightWindow=days;document.querySelectorAll('.wt-btn').forEach(b=>b.classList.remove('vol-btn-active'));const btn=document.getElementById('wt-btn-'+days);if(btn)btn.classList.add('vol-btn-active');drawChart();drawBfChart();drawBmiChart();drawLbmChart();}
 var _wHistOpen=false;function toggleWeightHist(){_wHistOpen=!_wHistOpen;var el=document.getElementById('weight-history-list');var chev=document.getElementById('wt-hist-chev');if(el)el.style.display=_wHistOpen?'block':'none';if(chev)chev.style.transform=_wHistOpen?'rotate(180deg)':'rotate(0deg)';}
-function buildSessionGroupStrength(group,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let best=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){const splits=getExSplits(ex.name);const frac=splits[group]||0;if(!frac)continue;const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const s of(ex.sets||[])){if(s.reps>0&&(s.kg>0||bwAdd>0)){const est=(s.kg+bwAdd)*ef*(1+Math.min(s.reps,10)/30)*frac;if(est>best)best=est;}}}}else if(log.notes){for(const line of log.notes.split('\n')){const kgM=line.match(/(\d+(?:\.\d+)?)\s*kg/i);if(!kgM)continue;const kg=parseFloat(kgM[1]);const repsStr=line.slice(kgM.index+kgM[0].length).trim();const reps=parseInt(repsStr.split('-')[0])||0;if(!kg||!reps)continue;const name=line.slice(0,kgM.index).trim();const frac=(getExSplits(name))[group]||0;if(!frac)continue;const est=kg*(1+Math.min(reps,10)/30)*frac;if(est>best)best=est;}}if(best>0)sessions.push({date:log.date,est1rm:best});}return sessions;}
+function buildSessionGroupStrength(group,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let best=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){const splits=getExSplits(ex.name);const frac=splits[group]||0;if(!frac)continue;const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const s of(ex.sets||[])){if(s.reps>0&&s.reps<=ONE_RM_MAX_REPS&&(s.kg>0||bwAdd>0)){const est=(s.kg+bwAdd)*ef*(1+Math.min(s.reps,10)/30)*frac;if(est>best)best=est;}}}}else if(log.notes){for(const line of log.notes.split('\n')){const kgM=line.match(/(\d+(?:\.\d+)?)\s*kg/i);if(!kgM)continue;const kg=parseFloat(kgM[1]);const repsStr=line.slice(kgM.index+kgM[0].length).trim();const reps=parseInt(repsStr.split('-')[0])||0;if(!kg||!reps||reps>ONE_RM_MAX_REPS)continue;const name=line.slice(0,kgM.index).trim();const frac=(getExSplits(name))[group]||0;if(!frac)continue;const est=kg*(1+Math.min(reps,10)/30)*frac;if(est>best)best=est;}}if(best>0)sessions.push({date:log.date,est1rm:best});}return sessions;}
 function drawStrengthGroupChart(canvasId,sessions,color,xDomain,showLabels,milestones){const canvas=document.getElementById(canvasId);if(!canvas)return;const dpr=window.devicePixelRatio||1;const cssW=canvas.offsetWidth||300;const cssH=showLabels?124:100;canvas.width=cssW*dpr;canvas.height=cssH*dpr;canvas.style.width=cssW+'px';canvas.style.height=cssH+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const PAD={top:showLabels?28:8,right:8,bottom:20,left:40};const cW=cssW-PAD.left-PAD.right;const cH=cssH-PAD.top-PAD.bottom;const sorted=[...sessions].sort((a,b)=>a.date.localeCompare(b.date));const raw=sorted.map(s=>s.est1rm);const smoothed=ewmaSmooth(sorted.map(s=>s.date),raw,14);const allVals=[...raw,...smoothed].filter(v=>v>0);if(!allVals.length){ctx.fillStyle='#444';ctx.font='11px -apple-system,sans-serif';ctx.textAlign='left';ctx.fillText('No data yet',PAD.left+4,cssH/2);return;}const maxV=Math.max(...allVals)*1.1||1;const minV=_chartScale==='absolute'?0:Math.max(0,Math.min(...allVals)*0.9);const range=maxV-minV||1;const dMs=d=>new Date(d+'T12:00:00').getTime();const minMs=dMs(xDomain.minDate);const maxMs=dMs(xDomain.maxDate);const span=Math.max(maxMs-minMs,86400000);const xOf=d=>PAD.left+((dMs(d)-minMs)/span)*cW;const yOf=v=>PAD.top+cH-((v-minV)/range)*cH;ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.5;[minV+range*0.5,maxV].forEach(v=>{ctx.beginPath();ctx.moveTo(PAD.left,yOf(v));ctx.lineTo(PAD.left+cW,yOf(v));ctx.stroke();});ctx.fillStyle='#444';ctx.font='9px -apple-system,sans-serif';ctx.textAlign='right';[minV+range*0.5,maxV].forEach(v=>{ctx.fillText(Math.round(kgToUnit(v))+unitLabel(),PAD.left-3,yOf(v)+3);});ctx.fillStyle='#555';ctx.font='9px -apple-system,sans-serif';ctx.textAlign='center';for(let t=0;t<=4;t++){const ms=minMs+(maxMs-minMs)*(t/4);const lbl=new Date(ms).toLocaleDateString('en-GB',{day:'numeric',month:'short'});ctx.fillText(lbl,PAD.left+(cW*t/4),PAD.top+cH+14);}var _lIdx=0;var _lastLblX=-999;(milestones||[]).forEach(m=>{const mx=xOf(m.date);if(mx<PAD.left||mx>PAD.left+cW)return;ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle=m.color+'99';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mx,PAD.top);ctx.lineTo(mx,PAD.top+cH);ctx.stroke();if(showLabels&&mx-_lastLblX>=44){ctx.setLineDash([]);ctx.font='8px -apple-system,sans-serif';ctx.fillStyle=m.color;ctx.textAlign='center';var _lbl=m.label.length>10?m.label.slice(0,9)+'…':m.label;ctx.fillText(_lbl,mx,PAD.top-5-(_lIdx%2)*9);_lIdx++;_lastLblX=mx;}ctx.restore();});const barW=Math.max(3,Math.min(10,cW/Math.max(sorted.length,1)*0.4));sorted.forEach((s,i)=>{const v=raw[i];if(!v)return;const x=xOf(s.date);const h=((v-minV)/range)*cH;ctx.fillStyle=color+'44';ctx.fillRect(x-barW/2,PAD.top+cH-h,barW,h);});ctx.setLineDash([]);if(smoothed.length>1){ctx.beginPath();sorted.forEach((s,i)=>{const x=xOf(s.date);const y=yOf(smoothed[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();}sorted.forEach((s,i)=>{ctx.beginPath();ctx.arc(xOf(s.date),yOf(smoothed[i]),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();});if(showLabels&&sorted.length>0){const lv=smoothed[smoothed.length-1];ctx.fillStyle=color;ctx.font='bold 9px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillText(Math.round(lv)+'kg',PAD.left+cW,PAD.top-5);}}
 function drawGroupChart(canvasId,sessions,color,xDomain,milestones,showLabels){const canvas=document.getElementById(canvasId);if(!canvas)return;const dpr=window.devicePixelRatio||1;const cssW=canvas.offsetWidth||300;const cssH=showLabels?124:100;canvas.width=cssW*dpr;canvas.height=cssH*dpr;canvas.style.width=cssW+'px';canvas.style.height=cssH+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const PAD={top:showLabels?28:8,right:8,bottom:20,left:36};const cW=cssW-PAD.left-PAD.right;const cH=cssH-PAD.top-PAD.bottom;const sorted=[...sessions].sort((a,b)=>a.date.localeCompare(b.date));const raw=sorted.map(s=>s.vol/1000);const smoothed=smoothArr(raw,5);const allVals=[...raw,...smoothed].filter(v=>v>0);if(!allVals.length){ctx.fillStyle='#444';ctx.font='11px -apple-system,sans-serif';ctx.textAlign='left';ctx.fillText('No data yet',PAD.left+4,cssH/2);return;}const maxV=Math.max(...allVals)*1.15||1;const _volMinV=_chartScale==='absolute'?0:Math.max(0,Math.min(...allVals)*0.8);const _volRange=(maxV-_volMinV)||1;const dMs=d=>new Date(d+'T12:00:00').getTime();const minMs=dMs(xDomain.minDate);const maxMs=dMs(xDomain.maxDate);const span=Math.max(maxMs-minMs,86400000);const xOf=d=>PAD.left+((dMs(d)-minMs)/span)*cW;const yOf=v=>PAD.top+cH-((v-_volMinV)/_volRange)*cH;ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.5;[_volMinV+_volRange*0.5,maxV].forEach(v=>{ctx.beginPath();ctx.moveTo(PAD.left,yOf(v));ctx.lineTo(PAD.left+cW,yOf(v));ctx.stroke();});ctx.fillStyle='#444';ctx.font='9px -apple-system,sans-serif';ctx.textAlign='right';[_volMinV+_volRange*0.5,maxV].forEach(v=>{ctx.fillText(v.toFixed(1)+'t',PAD.left-3,yOf(v)+3);});ctx.fillStyle='#555';ctx.font='9px -apple-system,sans-serif';ctx.textAlign='center';for(let t=0;t<=4;t++){const ms=minMs+(maxMs-minMs)*(t/4);const lbl=new Date(ms).toLocaleDateString('en-GB',{day:'numeric',month:'short'});ctx.fillText(lbl,PAD.left+(cW*t/4),PAD.top+cH+14);}var _lIdx=0;var _lastLblX=-999;(milestones||[]).forEach(m=>{const mx=xOf(m.date);if(mx<PAD.left||mx>PAD.left+cW)return;ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle=m.color+'99';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(mx,PAD.top);ctx.lineTo(mx,PAD.top+cH);ctx.stroke();if(showLabels&&mx-_lastLblX>=44){ctx.setLineDash([]);ctx.font='8px -apple-system,sans-serif';ctx.fillStyle=m.color;ctx.textAlign='center';var _lbl=m.label.length>10?m.label.slice(0,9)+'…':m.label;ctx.fillText(_lbl,mx,PAD.top-5-(_lIdx%2)*9);_lIdx++;_lastLblX=mx;}ctx.restore();});const barW=Math.max(3,Math.min(10,cW/Math.max(sorted.length,1)*0.4));sorted.forEach((s,i)=>{const v=raw[i];if(!v)return;const x=xOf(s.date);const h=((v-_volMinV)/_volRange)*cH;ctx.fillStyle=color+'44';ctx.fillRect(x-barW/2,PAD.top+cH-h,barW,h);});ctx.setLineDash([]);if(smoothed.length>1){ctx.beginPath();sorted.forEach((s,i)=>{const x=xOf(s.date);const y=yOf(smoothed[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();}sorted.forEach((s,i)=>{ctx.beginPath();ctx.arc(xOf(s.date),yOf(smoothed[i]),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();});}
 function buildSessionGroupVol(group,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let vol=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){const splits=getExSplits(ex.name);const frac=splits[group]||0;if(!frac)continue;const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const s of(ex.sets||[])){if(s.reps>0&&(s.kg>0||bwAdd>0))vol+=(s.kg+bwAdd)*s.reps*frac*ef;}}}else if(log.notes){const bw=getBWForDate(log.date);for(const line of log.notes.split('\n')){const sp=getExSplits(line);const fr=sp[group]||0;if(!fr)continue;const ef2=sp.factor||1;vol+=calcLineVol(line,bw)*fr*ef2;}}if(vol>0)sessions.push({date:log.date,vol});}return sessions;}
@@ -717,8 +718,236 @@ function selectDay(num,el){document.querySelectorAll('.day-card').forEach(c=>c.c
 // rehab is the only tag permitted above 12 reps. A generated program may therefore only
 // prescribe a rep count that some range defines — REPS_LEGAL — and anything else snaps to the
 // nearest legal value before the tag is read off it.
-var TAG_RANGES={strength:[4,6],volume:[8,12],rehab:[15,15]};
-var REPS_LEGAL=[4,5,6,8,9,10,11,12,15];
+// Strength is 2-6, not 4-6 (Henrik, 2026-08-08). Widened so a 1RM test can prescribe a real
+// double or triple instead of snapReps() forcing it up to 4 — "if a user wants a 1RM estimate
+// the rule is rather to go for a 2-3 rep max on a given weight after warm up". The canonical
+// source (GET /training-rules on the backend) was widened in the same change; these must agree.
+// volume and rehab are untouched, 7 still belongs to no band, and rehab is still the only tag
+// permitted above 12.
+var TAG_RANGES={strength:[2,6],volume:[8,12],rehab:[15,15]};
+var REPS_LEGAL=[2,3,4,5,6,8,9,10,11,12,15];
+// ── LEG-DAY RULE (Henrik, 2026-08-21) ────────────────────────────────────────
+// "every version of leg day MUST start with min 3 sets of squats in strenght rep range.
+//  And every leg day must end with 1-3 sets if strenght rep range deadlifts. No exceptions"
+//
+// SUPERSEDES the 2026-07-10 alternation, which made each leg day EITHER a squat day OR a
+// deadlift day on a systemic-load argument. Henrik has overruled that repeatedly. Gone.
+//
+// "min 3 sets" is a FLOOR, not a fixed count — the squat stays target-sized by the allocator
+// (rule 2026-07-31) and is only ever raised to 3, never pinned there. The deadlift is the
+// fixed prescription it already was, now clamped to the 1-3 window.
+//
+// Rep counts live inside TAG_RANGES.strength so applyTagFromReps confirms the tag rather than
+// flipping it. An entry already prescribing strength-range reps KEEPS them: a goal-specific
+// 5×5 or a 1×6 finisher already complies, and rewriting it would be churn.
+var LEGDAY_SQUAT_MIN_SETS=3;      // "min 3 sets of squats"
+var LEGDAY_DL_MIN_SETS=1;         // "1-3 sets ... deadlifts"
+var LEGDAY_DL_MAX_SETS=3;
+var LEGDAY_STRENGTH_REPS=5;       // used only when authoring fresh, or repairing illegal reps
+
+// The opening squat: any squat pattern EXCEPT the ones that are not the movement being asked
+// for. Split squats and Bulgarians are unilateral accessories; hack/Smith/pendulum are machines.
+// A day carrying only those still gets a real Squat inserted ahead of them.
+function _isMainSquat(name){
+  var n=String(name||'');
+  if(!/squat/i.test(n))return false;
+  return !/split|bulgarian|sissy|goblet|hack|smith|pendulum|belt/i.test(n);
+}
+// The closing deadlift: the conventional pull only. A Romanian/stiff-leg deadlift is a hamstring
+// accessory, not the strength lift being asked for, and counting it as one is how a leg day
+// could "end with a deadlift" while never programming the lift.
+function _isMainDeadlift(name){
+  var n=String(name||'');
+  if(!/deadlift/i.test(n))return false;
+  return !/romanian|\brdl\b|stiff|straight[- ]?leg|deficit|snatch|trap[- ]?bar|smith|single/i.test(n);
+}
+function _legdayRepsOk(sets){
+  var parts=String(sets||'').split('-').filter(Boolean);
+  if(!parts.length)return false;
+  return parts.every(function(r){
+    var n=parseInt(r,10);
+    return isFinite(n)&&n>=TAG_RANGES.strength[0]&&n<=TAG_RANGES.strength[1];
+  });
+}
+function _legdaySetCount(ex){return String((ex&&ex.sets)||'').split('-').filter(Boolean).length;}
+
+// IS THIS A LEG DAY? DECIDED BY CONTENT, NOT BY NAME.
+//
+// The previous rule tested /legs/i against the day NAME and therefore skipped "Lower Strength",
+// "Lower Volume", "Lower A/B", "Lower Push", "Lower Pull", "Heavy Squat", "Squat Volume",
+// "Deadlift", "Quad & Glute", "Glute & Hamstring" and "Glute Specialization" — every one of
+// them a leg day the generator authors. That is the single biggest reason this kept looking
+// unimplemented: on most generated programs the rule never ran at all.
+//
+// Content cannot be spelled wrong. A day is a leg day when legs are what it trains: at least
+// half its exercises are leg movements. The name survives only as a tiebreak for a day whose
+// exercises cannot be classified.
+//
+// FULL-BODY days are excluded by design (rule 2026-07-24): they rotate ONE main lower lift per
+// session, and applying this rule would turn every session into a leg session.
+function _isLegDay(day){
+  if(!day)return false;
+  var nm=String(day.name||'');
+  if(/full\s*body|full\s*light|—\s*full\s*$/i.test(nm))return false;
+  var exs=day.exercises||[];
+  if(!exs.length)return false;
+  // SHARE OF VOLUME, not a count of exercises. Counting exercises called a strength
+  // program's "Day 3 — Deadlift" a leg day: one deadlift beside a Barbell Row, Pull-ups and a
+  // Lat Pulldown is a posterior-chain and BACK session, and injecting a squat at the front of
+  // it added leg volume to a day that was never a leg day. getExSplits already knows a
+  // Deadlift is 0.6 legs / 0.4 back — weighting by that and by set count answers the question
+  // the name cannot.
+  var legVol=0,totVol=0;
+  exs.forEach(function(ex){
+    var sp=(typeof getExSplits==='function')?getExSplits(ex.name):{};
+    var n=String(ex.sets||'').split('-').filter(Boolean).length||1;
+    ['legs','back','chest','shoulders','arms'].forEach(function(g){
+      var f=sp[g]||0;if(!f)return;
+      totVol+=n*f;
+      if(g==='legs')legVol+=n*f;
+    });
+  });
+  // Legs must DOMINATE. The threshold is 0.6, not a bare majority: an accessory day carrying
+  // a Leg Curl and Calf Raises beside Lateral Raises lands at ~0.55 and is NOT a leg day,
+  // while every real leg day the generator authors sits at 0.85-0.95. A bare majority put
+  // squats on the accessory day at high set targets and nowhere near it at low ones — the
+  // same program disagreeing with itself depending on volume.
+  if(totVol>0)return legVol/totVol>0.6;
+  // Only when nothing in the day can be classified does the name get a vote. Deliberately
+  // without `squat`/`deadlift`: those name a LIFT, and a day named after one is not
+  // necessarily a leg day — which is the exact mistake above.
+  return /\blegs?\b|\blower\b|\bquad|\bglute|\bhamstring|\bcalf/i.test(nm);
+}
+
+// THE SLOT IS MANDATORY; THE MOVEMENT IN IT IS NOT.
+//
+// Injury substitution runs before the final re-assert, so a rule that re-injected a raw
+// 'Squat' afterwards would put squats back into a knees-injury program and deadlifts back into
+// a lower-back one — undoing the only safety layer the generator has. Both entry points route
+// the lift name through REHAB_CONDITIONS first, so a knees injury opens the day with Leg Press
+// and a lower-back injury closes it with Leg Press. Henrik's rule decides the SLOT and the set
+// count; the injury layer decides what is safe to put in it.
+function _legdaySafeName(name,injuries){
+  if(!injuries||!injuries.length)return name;
+  if(typeof REHAB_CONDITIONS==='undefined')return name;
+  var out=name;
+  injuries.forEach(function(cid){
+    var c=REHAB_CONDITIONS.find(function(x){return x.id===cid;});
+    if(c&&out&&c.detect(out))out=c.suggest(out);
+  });
+  return out;
+}
+
+// Place both lifts and author their prescriptions. Idempotent: running it twice leaves the same
+// single squat at the front and the same single deadlift at the back.
+//
+// REHAB PROGRAMS ARE EXCLUDED. A rehab program exists because something is injured, and the
+// pre-existing rule "no heavy deadlift forced into rehab days" is explicit about it. Forcing a
+// heavy squat and deadlift into a Knee Rehab or Hip Hinge Rehab session would work against the
+// only thing that session is for. Everything else — every goal, every split, every day name —
+// gets the rule with no exception.
+// A knees injury blocks the squat but not the deadlift: the day still has to END with one.
+function _legdayDeadliftOnly(day,exs,pw,injuries){
+  var dl=null;
+  for(var j=exs.length-1;j>=0;j--){ if(_isMainDeadlift(exs[j].name)){ dl=exs.splice(j,1)[0]; } }
+  if(!dl)dl=(pw?pw:function(n,s,t,r,k){return{name:n,scheme:s,tag:t,sets:r,kg:k};})(
+    _legdaySafeName('Deadlift',injuries),'','strength','',120);
+  var n=Math.min(LEGDAY_DL_MAX_SETS,Math.max(LEGDAY_DL_MIN_SETS,
+        String(dl.sets||'').split('-').filter(Boolean).length||2));
+  var r=_legdayRepsOk(dl.sets)?String(dl.sets).split('-')[0]:LEGDAY_STRENGTH_REPS;
+  var out=[];for(var i=0;i<n;i++)out.push(r);
+  dl.sets=out.join('-');dl.tag='strength';dl.fixed=true;dl.scheme=n+'×'+r;
+  if(!(parseFloat(dl.kg)>0))dl.kg=120;
+  exs.push(dl);
+  return day;
+}
+
+function _applyLegDayRule(day,pw,goal,injuries){
+  if(goal==='rehab')return day;
+  if(!_isLegDay(day))return day;
+  var exs=day.exercises||(day.exercises=[]);
+  function _mk(n,s,t,r,k){return pw?pw(n,s,t,r,k):{name:n,scheme:s,tag:t,sets:r,kg:k};}
+  function _reps(n){var out=[];for(var i=0;i<n;i++)out.push(LEGDAY_STRENGTH_REPS);return out.join('-');}
+
+  // ── Squat first, at least 3 sets ──────────────────────────────────────────
+  // Deliberately NOT `fixed`: "min 3 sets" is a floor. The allocator still sizes it to the
+  // weekly target (rule 2026-07-31) and _enforceLegDayFloor raises it afterwards if the
+  // allocation came in under 3.
+  // When an injury substitutes the squat away there is no squat to hoist and none to insert;
+  // the day keeps whatever the injury layer chose and this half of the rule stands down.
+  var _sqBlocked=_legdaySafeName('Squat',injuries)!=='Squat';
+  var _dlBlocked=_legdaySafeName('Deadlift',injuries)!=='Deadlift';
+  var sq=null;
+  for(var i=exs.length-1;i>=0;i--){ if(_isMainSquat(exs[i].name)){ sq=exs.splice(i,1)[0]; } }
+  if(_sqBlocked&&!sq){ if(!_dlBlocked)_legdayDeadliftOnly(day,exs,pw,injuries); return day; }
+  if(!sq)sq=_mk(_legdaySafeName('Squat',injuries),'','strength',_reps(LEGDAY_SQUAT_MIN_SETS),100);
+  var sqSets=Math.max(LEGDAY_SQUAT_MIN_SETS,_legdaySetCount(sq));
+  if(!_legdayRepsOk(sq.sets))sq.sets=_reps(sqSets);
+  else if(_legdaySetCount(sq)<LEGDAY_SQUAT_MIN_SETS){
+    var _sp=String(sq.sets).split('-').filter(Boolean);
+    while(_sp.length<LEGDAY_SQUAT_MIN_SETS)_sp.push(_sp[_sp.length-1]);
+    sq.sets=_sp.join('-');
+  }
+  sq.tag='strength';
+  sq.scheme=_legdaySetCount(sq)+'×'+String(sq.sets).split('-')[0];
+  if(!(parseFloat(sq.kg)>0))sq.kg=100;
+  exs.unshift(sq);
+
+  // ── Deadlift last, 1-3 sets ───────────────────────────────────────────────
+  // `fixed:true` is load-bearing, not decoration: it is honoured by the volume allocator, the
+  // 25-set session ceiling trim, the balance guardrail and the setsPerMuscle scaling. Without
+  // it the finisher gets resized out of the 1-3 window Henrik specified.
+  if(_dlBlocked){ return day; }
+  var dl=null;
+  for(var j=exs.length-1;j>=0;j--){ if(_isMainDeadlift(exs[j].name)){ dl=exs.splice(j,1)[0]; } }
+  if(!dl)dl=_mk(_legdaySafeName('Deadlift',injuries),'','strength','',Math.round((parseFloat(sq.kg)||100)*1.2));
+  var dlSets=Math.min(LEGDAY_DL_MAX_SETS,Math.max(LEGDAY_DL_MIN_SETS,_legdaySetCount(dl)||2));
+  if(!_legdayRepsOk(dl.sets)||_legdaySetCount(dl)!==dlSets){
+    var _dr=_legdayRepsOk(dl.sets)?String(dl.sets).split('-')[0]:LEGDAY_STRENGTH_REPS;
+    var _out=[];for(var k=0;k<dlSets;k++)_out.push(_dr);
+    dl.sets=_out.join('-');
+  }
+  dl.tag='strength';
+  dl.fixed=true;
+  dl.scheme=dlSets+'×'+String(dl.sets).split('-')[0];
+  if(!(parseFloat(dl.kg)>0))dl.kg=Math.round((parseFloat(sq.kg)||100)*1.2);
+  exs.push(dl);
+
+  return day;
+}
+
+// Runs AFTER allocation, the ceiling trim, the balance guardrail, injury swaps and every other
+// structural pass — all of which can resize or reorder entries. Re-asserting here is what makes
+// the rule hold in the finished program rather than only at the moment it was applied.
+function _enforceLegDayFloor(day,goal,pw,injuries){
+  if(goal==='rehab')return day;
+  if(!_isLegDay(day))return day;
+  var exs=day.exercises||[];
+  // A day can CROSS the leg-dominance threshold during allocation — trim the upper work and
+  // what was an accessory day is suddenly leg-dominant. Re-running the rule (it is idempotent)
+  // is what stops a finished leg day from carrying neither lift.
+  var _hasSq=exs.some(function(e){return _isMainSquat(e.name);});
+  var _hasDl=exs.some(function(e){return _isMainDeadlift(e.name);});
+  if(!_hasSq||!_hasDl){_applyLegDayRule(day,pw,goal,injuries);exs=day.exercises||[];}
+  var si=-1,di=-1;
+  for(var i=0;i<exs.length;i++){
+    if(si<0&&_isMainSquat(exs[i].name))si=i;
+    if(_isMainDeadlift(exs[i].name))di=i;
+  }
+  if(si>=0){
+    var sq=exs[si];
+    var parts=String(sq.sets||'').split('-').filter(Boolean);
+    if(!_legdayRepsOk(sq.sets)){parts=[];for(var a=0;a<LEGDAY_SQUAT_MIN_SETS;a++)parts.push(LEGDAY_STRENGTH_REPS);}
+    while(parts.length<LEGDAY_SQUAT_MIN_SETS)parts.push(parts[parts.length-1]||LEGDAY_STRENGTH_REPS);
+    sq.sets=parts.join('-');
+    sq.tag='strength';
+    sq.scheme=parts.length+'×'+parts[0];
+    if(si>0)exs.unshift(exs.splice(si,1)[0]);
+  }
+  for(var j=0;j<exs.length;j++){if(_isMainDeadlift(exs[j].name)){di=j;break;}}
+  if(di>=0&&di!==exs.length-1)exs.push(exs.splice(di,1)[0]);
+  return day;
+}
 function tagForReps(r){
   var n=parseInt(r,10);
   if(!isFinite(n)||String(r).trim()==='')return null; // 'max' / AMRAP keeps whatever it had
@@ -1121,7 +1350,31 @@ function _progRmDay(di){if(_progEditBuf.days.length<=1){alert('Program needs at 
 function _progAddDay(){_progEditBuf.days.push({name:'Day '+(_progEditBuf.days.length+1)+' — New Day',warmup:false,exercises:[{name:'Squat',scheme:'3×10',tag:'strength',sets:'10-10-10',kg:60}]});_renderProgOverlay();}
 function _progRmEx(di,ei){_progEditBuf.days[di].exercises.splice(ei,1);_renderProgOverlay();}
 function _progAddEx(di){_progEditBuf.days[di].exercises.push({name:'',scheme:'3×10',tag:'volume',sets:'10-10-10',kg:0});_renderProgOverlay();}
-function _saveProgEdit(){_progIsNew=false;_programs[_progEditIdx]=_progEditBuf;savePrograms();if(_progEditIdx===_activeProgramIndex){rebuildDayGrid();rebuildLogDaySelect();}buildProgramSettingsCard();closeProgramOverlay();}
+// Editing the ACTIVE program changes what the Program and Log screens are supposed to show,
+// but rebuildDayGrid() and rebuildLogDaySelect() only rebuild the day CARDS and the day
+// <select> — neither re-renders the exercise list underneath either one. Nothing else picked
+// the edit up on the way back to those screens:
+//   - showPage('program') calls buildProgramSettingsCard() and nothing else, so the workout
+//     detail is never re-rendered on navigation;
+//   - showPage('log') re-prefills only when the card list is empty, the day changed, or the
+//     deload/unit state went stale — after an edit the day is usually unchanged and no reps
+//     are entered, so every condition is false and the stale cards survive.
+// Net effect: both screens kept the OLD exercises until the app was force-quit and relaunched,
+// which is the only thing that runs initPrograms() again (Henrik, 2026-08-12).
+function _refreshActiveProgramViews(){
+  renderWorkout(_selectedProgramDay);
+  // Never blow away a workout in progress. This is the same guard showPage() and
+  // _refreshUnitUI() already use: if any reps are typed in, leave the log alone — the user
+  // is mid-session and their entries outrank a template refresh.
+  var c=document.getElementById('structured-log');
+  var hasReps=c&&Array.from(c.querySelectorAll('input[data-type="reps"]')).some(function(i){return parseInt(i.value)>0;});
+  if(hasReps)return;
+  // Read the day back off the select: rebuildLogDaySelect() has just re-pointed it at a
+  // valid day, which matters when the edit removed the day that was selected.
+  var sel=document.getElementById('log-day');
+  if(sel&&sel.value)prefillLog(sel.value);
+}
+function _saveProgEdit(){_progIsNew=false;_programs[_progEditIdx]=_progEditBuf;savePrograms();if(_progEditIdx===_activeProgramIndex){rebuildDayGrid();rebuildLogDaySelect();_refreshActiveProgramViews();}buildProgramSettingsCard();closeProgramOverlay();}
 function _applyRehabSubs(exercises,prog){var subs=(prog||{}).rehabSubs||{};if(!Object.keys(subs).length)return exercises;return exercises.map(function(ex){var eff=subs[ex.name];return eff?Object.assign({},ex,{name:eff,_rehabOrig:ex.name}):ex;});}
 function _rehabSetSub(orig,val){if(!_progEditBuf.rehabSubs)_progEditBuf.rehabSubs={};_progEditBuf.rehabSubs[orig]=val;}
 function _rehabRemoveSub(orig){if(_progEditBuf.rehabSubs)delete _progEditBuf.rehabSubs[orig];_renderProgOverlay();}
@@ -1206,6 +1459,47 @@ function _progWizGenerate(){
 // Build manually (2026-07-23): skip the generator wizard entirely — create a blank
 // 1-day program and drop straight into the existing editor (add days/exercises, set
 // schemes/sets/weights/tags). _progIsNew=true means closing without Save discards it.
+// ── 1RM test program (Progress → Exercise) ───────────────────────────────────
+// Henrik, 2026-08-08: "Add creation of 1RM measurment program reachable from Progress tab.
+// Not for all exercises but the ones where it is common and reasonable incl weighted pull ups."
+//
+// The testable set is a deliberate WHITELIST, not everything in the catalogue. Maxing a Face
+// Pull or a Leg Curl is neither common nor sensible, and a rehab/isolation movement should
+// never be taken to a limit single. These six are the standard tested compounds, including the
+// weighted pull-up Henrik named.
+var ONE_RM_TESTABLE=['Squat','Bench Press','Deadlift','Barbell Row','Overhead Press','Weighted Pull-ups'];
+var ONE_RM_PROGRAM_NAME='1RM Test';
+// Prescription: ONE top set of 3 after warming up, per Henrik's rule — "go for a 2-3 rep max on
+// a given weight after warm up". 3 is a legal strength prescription since the band was widened
+// to 2-6 in this same change; before that snapReps() would have forced it to 4.
+// warmup:true on every day — the rule is a max AFTER warming up, and the day carries that flag.
+// kg is 0 on purpose: never seed one person's loads (GDPR rule 2026-06-24). The log prefill
+// fills each lift from the user's own saved/history weight.
+// Days pair two lifts each and NEVER put Squat with a conventional Deadlift, honouring the
+// leg-day CNS rule — a limit single on both in one session is exactly what that rule prevents.
+function _oneRmTestProgram(){
+  function tx(n){return{name:n,scheme:'1×3 — work up to a 3-rep max',tag:'strength',sets:'3',kg:0};}
+  return{name:ONE_RM_PROGRAM_NAME,goal:'strength',days:[
+    {name:'Day 1 — Squat & Bench Max',warmup:true,exercises:[tx('Squat'),tx('Bench Press')]},
+    {name:'Day 2 — Deadlift & Row Max',warmup:true,exercises:[tx('Deadlift'),tx('Barbell Row')]},
+    {name:'Day 3 — Press & Pull-up Max',warmup:true,exercises:[tx('Overhead Press'),tx('Weighted Pull-ups')]}
+  ]};
+}
+function _findOneRmProgram(){for(var i=0;i<_programs.length;i++){if(_programs[i]&&_programs[i].name===ONE_RM_PROGRAM_NAME)return i;}return -1;}
+function createOneRmProgram(){
+  var existing=_findOneRmProgram();
+  if(existing>=0){alert('You already have a "'+ONE_RM_PROGRAM_NAME+'" program — open it from the Program tab.');return;}
+  if(_programs.length>=4){alert('Maximum 4 programs. Delete one before adding the '+ONE_RM_PROGRAM_NAME+' program.');return;}
+  var names=ONE_RM_TESTABLE.join(', ');
+  if(!confirm('Create a "'+ONE_RM_PROGRAM_NAME+'" program?\n\n3 sessions, each warming up then ONE top set of 3 reps:\n'+names+'\n\nIt is added as a separate program — your active program is not changed.'))return;
+  _programs.push(_oneRmTestProgram());
+  // savePrograms() writes localStorage AND pushes to the backend in the same call — a
+  // localStorage-only write would be lost on a cache wipe (backend-is-source-of-truth rule).
+  savePrograms();
+  if(typeof buildProgramSettingsCard==='function')buildProgramSettingsCard();
+  rebuildDayGrid();rebuildLogDaySelect();
+  alert('"'+ONE_RM_PROGRAM_NAME+'" created. Pick it on the Program tab when you want to test.\n\nLog the reps you actually hit — a set of 2-3 is what produces a trustworthy estimate here.');
+}
 function _progBuildManual(){
   if(_programs.length>=4){alert('Maximum 4 programs');return;}
   var prog={name:'My Program',goal:'hypertrophy',days:[{name:'Day 1',warmup:false,exercises:[{name:'',scheme:'3×10',tag:'volume',sets:'10-10-10',kg:0}]}]};
@@ -1345,25 +1639,41 @@ function _generateWorkoutProgram(goal,sub,nDays,name,setsPerMuscle,injuries){
       var _seen={};day.exercises=(day.exercises||[]).filter(function(ex){if(_seen[ex.name])return false;_seen[ex.name]=1;return true;});
     });
   }
-  // Leg-day rules (2026-07-10): each Legs* day is EITHER a Squat day (Squat first, no
-  // conventional Deadlift) OR a Deadlift day (Deadlift last, 5-8 reps, no squat variants) —
-  // never both in one session (systemic load). Alternates, starting with a Squat day.
-  var _legIdx=0;
-  pool.forEach(function(day){if(!/legs/i.test(day.name))return;var exs=day.exercises;var _isSq=function(ex){return /squat/i.test(ex.name)&&!/split/i.test(ex.name);};
-    if(_legIdx++%2===0){
-      for(var _r1=exs.length-1;_r1>=0;_r1--){if(exs[_r1].name==='Deadlift')exs.splice(_r1,1);}
-      var si=-1;for(var _i2=0;_i2<exs.length;_i2++){if(_isSq(exs[_i2])){si=_i2;break;}}
-      if(si>0){exs.unshift(exs.splice(si,1)[0]);}else if(si<0){exs.unshift(pw('Squat','4×8-12','strength','8-8-8-8',80));}
-    }else{
-      for(var _r2=exs.length-1;_r2>=0;_r2--){if(_isSq(exs[_r2]))exs.splice(_r2,1);}
-      var dli=-1;for(var _j2=0;_j2<exs.length;_j2++){if(exs[_j2].name==='Deadlift'){dli=_j2;break;}}
-      var dlx;if(dli>=0){dlx=exs.splice(dli,1)[0];}else{dlx=pw('Deadlift','1×5-8','strength','6',Math.round(((exs[0]||{}).kg||80)*1.5));}
-      // The heavy Deadlift is a fixed prescription (2026-07-31): it is always present and keeps
-      // exactly the sets it was authored with. `fixed` exempts it from the volume allocator, the
-      // linear strength scaling, the 25-set ceiling trim and the balance guardrail — its sets are
-      // still counted as real volume, so everything else in the session is sized around it.
-      dlx.tag='strength';dlx.fixed=true;dlx.scheme=String(dlx.sets).split('-').length+'×5-8';exs.push(dlx);
-    }});
+  // ── LEG-DAY RULE (Henrik, 2026-08-21) — SUPERSEDES THE 2026-07-10 ALTERNATION ─────
+  // "every version of leg day MUST start with min 3 sets of squats in strenght rep range.
+  //  And every leg day must end with 1-3 sets if strenght rep range deadlifts. No exceptions"
+  //
+  // EVERY leg day now gets BOTH. The old rule made each Legs* day EITHER a squat day OR a
+  // deadlift day, alternating, on a systemic-load argument. That is the rule Henrik has
+  // overruled repeatedly; it is gone, not softened.
+  //
+  // Three separate reasons the old rule kept failing to deliver what he asked for, all fixed
+  // here — the alternation was only the most visible one:
+  //
+  //  1. IT ONLY MATCHED /legs/i. The generator authors leg days under many names: "Lower
+  //     Strength", "Lower Volume", "Lower A/B", "Lower Push", "Lower Pull", "Heavy Squat",
+  //     "Squat Volume", "Deadlift", "Quad & Glute", "Glute & Hamstring", "Glute
+  //     Specialization", "Knee Rehab", "Hip Hinge Rehab". NONE of those contain "legs", so the
+  //     rule skipped them silently and most generated programs never had it applied at all.
+  //     _isLegDay now decides by CONTENT — what the day actually trains — with the name only
+  //     as a tiebreak, so a new day name can never opt out of the rule again.
+  //  2. THE SQUAT WAS NOT FIXED. Even when injected it was left resizable, so the volume
+  //     allocator, the 25-set ceiling trim and the balance guardrail could all cut it back
+  //     below 3 sets. Both lifts are `fixed:true` now — that flag is honoured by every one of
+  //     those passes plus the setsPerMuscle scaling.
+  //  3. THE REPS WERE WRONG. The injected squat was authored '8-8-8-8' — tagged `strength`
+  //     while prescribing the VOLUME range. Both lifts are now written at LEGDAY_STRENGTH_REPS,
+  //     inside TAG_RANGES.strength, so applyTagFromReps confirms the tag instead of flipping it.
+  //
+  // Full-body days are NOT leg days: they deliberately rotate ONE main lower lift per session
+  // (rule 2026-07-24), and forcing squat+deadlift into all of them would make every session a
+  // leg session. If Henrik wants that too it is a one-line change to _isLegDay.
+  //
+  // Injury substitution runs AFTER this and still applies: a knees injury turns the opening
+  // Squat into Leg Press, a lower-back injury turns the closing Deadlift into Leg Press. That
+  // is the existing, deliberate safety layer — this rule sets the slot, the injury layer
+  // decides what is safe to put in it.
+  pool.forEach(function(day){ _applyLegDayRule(day, pw, goal, injuries); });
   var days=pool.slice(0,nDays).map(function(day,i){return Object.assign({},day,{name:'Day '+(i+1)+' — '+day.name.replace(/^Day \d+ — /,'')});});
   // Injuries (2026-07-10): substitutions are baked into the program permanently — the
   // aggravating exercise is replaced before allocation so volume redistributes correctly
@@ -1534,6 +1844,13 @@ function _generateWorkoutProgram(goal,sub,nDays,name,setsPerMuscle,injuries){
     var _pi=-1;for(var _i=0;_i<exs.length;_i++){if(isPullUpEx(exs[_i].name)){_pi=_i;break;}}
     if(_pi>0)exs.unshift(exs.splice(_pi,1)[0]);
   });
+  // LEG-DAY RULE, RE-ASSERTED (2026-08-21). Applying it once before allocation was not enough:
+  // the allocator, the 25-set ceiling trim, the balance guardrail, injury swaps, the Face Pull
+  // relocation and the pull-up hoist all resize or reorder entries afterwards, any of which
+  // could drop the squat under 3 sets or move a lift out of its slot. This pass runs last, so
+  // "squat first, min 3 sets / deadlift last, 1-3 sets" describes the program the user is
+  // actually handed rather than an intermediate state.
+  days.forEach(function(day){ _enforceLegDayFloor(day,goal,pw,injuries); });
   // Automatic tagging, last word: snap every prescription onto a rep count some range defines,
   // then label it from that count. Runs after allocation so the scheme's set prefix is already
   // final, and after the leg-day rule, which re-authors the heavy Deadlift's scheme.
@@ -1569,6 +1886,116 @@ function onCustomExPicked(sel){_refreshCardGearBtns(sel.closest('.ex-card'),sel.
 function toggleDb(btn,exName){const card=btn.closest('.ex-card');const cur=parseFloat(card.dataset.db)||parseFloat(btn.dataset.db)||1;const next=cur===1?2:1;card.dataset.db=next;btn.dataset.db=next;btn.textContent='DB';_setGearBtnActive(btn,next===2);localStorage.setItem('wk-db-'+(exName||btn.dataset.exn),next);_pushGearSettings('wk-db-','wo_db_toggles');card.dataset.gear=_cardGearProduct(card);}
 let _draftTimer=null;
 let _logStartedAt=null;
+// ── ENERGY COST OF A SESSION (Henrik, 2026-08-21) ───────────────────────────
+// Shown on the save confirmation and on both history views. ONE function feeds all three so
+// the number on the popup and the number in History can never disagree.
+//
+// ⚠️ NOT FROM THE CLOCK. The first version of this used session duration and the ACSM MET
+// equation. Henrik, same day: "Time cant be used for kcal calculations, I have sometimes lost
+// logs due to app restarts and had to reenter all data, in reality no workout lasts mere
+// seconds." He was right and the History screen proved it — a 15.9 t leg session stamped 0:01
+// and reported as ~6 kcal, beside a re-entered push day stamped 2:56 and reported as ~959.
+// duration_min is wall-clock between the first rep entered and Save, so a re-entry after a
+// restart records seconds and an abandoned tab records hours. It is not a measure of training.
+//
+// SO THIS IS COMPUTED FROM THE WORK ACTUALLY DONE — load, reps and how far the load moved:
+//
+//   W = Σ (load_kg × 9.81 × ROM_m × reps)      mechanical work, per set, in joules
+//   kcal = W × (1 + ECCENTRIC) / EFFICIENCY / 4184
+//
+// ECCENTRIC: lowering the weight costs energy too, at roughly a third of the concentric cost
+// for the same force, so each rep is charged 1.33 × its lifting work.
+// EFFICIENCY: skeletal muscle converts about 20% of metabolic energy into external work; the
+// rest leaves as heat. That ratio is what turns bar work into calories burned.
+//
+// `load` is the SAME expression the volume and 1RM code already use — s.kg, plus body weight
+// for weighted pull-ups, times the gear multiplier and the bodyweight `factor` (a push-up
+// lifts 0.64 of you, a dip 0.7). Reusing it means the calorie figure and the tonnage can never
+// describe different sessions.
+//
+// WHAT IT DOES NOT INCLUDE: the resting metabolism you would have spent anyway, the cost of
+// walking between machines, setup and unracking, or grip and stabiliser work that moves no
+// load. It is the cost of the lifting itself, which is the part the log actually records.
+// Every rendering carries a "~".
+var KCAL_ECCENTRIC = 0.33;     // lowering ≈ 1/3 the metabolic cost of lifting, same force
+var KCAL_EFFICIENCY = 0.20;    // mechanical work / metabolic energy, skeletal muscle
+var KCAL_JOULES = 4184;        // J per kcal
+var KCAL_G = 9.81;             // m/s²
+
+// RANGE OF MOTION, metres — how far the load travels in one rep. Nominal averages for a
+// roughly 180 cm lifter, not measurements: a squat is not a calf raise and a calf raise is not
+// a deadlift, and without this a 15 kg calf raise for 20 reps would look like real work.
+// Ordered longest-key-first and matched by substring, exactly like EXERCISE_SPLITS, so
+// "Romanian Deadlift" resolves before the bare "deadlift" entry.
+var EXERCISE_ROM=[["external rotation",0.35],["leg curl",0.35],["leg extension",0.40],
+  ["leg press",0.45],["calf",0.12],["lunge",0.50],["bulgarian",0.50],["hip thrust",0.35],
+  ["hack squat",0.50],["squat",0.55],["romanian",0.45],["rdl",0.45],["deadlift",0.55],
+  ["rear delt",0.40],["lateral raise",0.50],["face pull",0.40],["y-raise",0.50],["y raise",0.50],
+  ["front raise",0.55],["upright row",0.40],["shrug",0.15],["chin-up",0.60],["chinup",0.60],
+  ["pull-up",0.60],["pullup",0.60],["lat pulldown",0.55],["pulldown",0.55],["t-bar",0.40],
+  ["barbell row",0.45],["cable row",0.50],["cable fly",0.55],["chest fly",0.55],
+  ["cable crossover",0.55],["pec",0.50],["chest machine",0.45],["incline",0.45],["decline",0.40],
+  ["chest press",0.45],["bench",0.45],["push-up",0.40],["pushup",0.40],["dip",0.45],
+  ["landmine",0.50],["overhead tricep",0.45],["overhead press",0.55],["ohp",0.55],
+  ["shoulder press",0.55],["arnold",0.55],["tricep",0.35],["pushdown",0.35],["push-down",0.35],
+  ["skullcrusher",0.40],["close grip",0.45],["preacher",0.40],["hammer",0.40],["curl",0.40],
+  ["fly",0.55],["row",0.45],["press",0.45]];
+var KCAL_ROM_DEFAULT=0.45;
+// BODY MASS THAT TRAVELS WITH THE LOAD, as a fraction of body weight. In a squat the bar is
+// not the only thing rising — torso, head, arms and part of the legs go up the same 0.55 m, and
+// for an 89 kg lifter that is another ~58 kg per rep, comparable to the bar itself. Ignoring it
+// made a barbell squat look like a leg press, which is the opposite of true.
+//
+// ZERO where the body does not travel (bench, leg press, curls, machines) and ZERO where the
+// body IS the load (push-ups, dips, pull-ups) — those already come through the kg field and the
+// `factor` split, and counting them here would charge them twice.
+var EXERCISE_BW_FRAC=[["leg curl",0],["leg extension",0],["leg press",0],["calf",0.90],
+  ["lunge",0.65],["bulgarian",0.65],["hip thrust",0.35],["hack squat",0.50],["squat",0.65],
+  ["romanian",0.30],["rdl",0.30],["deadlift",0.30],["chin-up",0],["chinup",0],["pull-up",0],
+  ["pullup",0],["push-up",0],["pushup",0],["dip",0]];
+function exerciseBwFrac(name){
+  var n=String(name||'').toLowerCase();
+  for(var i=0;i<EXERCISE_BW_FRAC.length;i++){if(n.indexOf(EXERCISE_BW_FRAC[i][0])>=0)return EXERCISE_BW_FRAC[i][1];}
+  return 0;
+}
+function exerciseRom(name){
+  var n=String(name||'').toLowerCase();
+  for(var i=0;i<EXERCISE_ROM.length;i++){if(n.indexOf(EXERCISE_ROM[i][0])>=0)return EXERCISE_ROM[i][1];}
+  return KCAL_ROM_DEFAULT;
+}
+
+// NO BODY WEIGHT, NO NUMBER for a session whose load depends on it. getBWForDate falls back to
+// 80 kg, which is fine for its own callers and wrong here: a calorie figure derived from a body
+// weight the user never entered is a fabricated number wearing the same "~" as a real estimate.
+function estimateSessionKcal(log){
+  if(!log||!log.exercises||!log.exercises.length)return null;
+  var haveW=(typeof weights!=='undefined'&&weights&&weights.length);
+  var bw=haveW?getBWForDate(log.date):0;
+  var joules=0,counted=0,needBw=false;
+  log.exercises.forEach(function(ex){
+    var sp=(typeof getExSplits==='function')?getExSplits(ex.name):{};
+    var factor=(sp&&sp.factor)||1;
+    var gear=parseFloat(ex.gear)||1;
+    var rom=exerciseRom(ex.name);
+    var isWPU=/weighted\s*(pull|chin)/i.test(ex.name||'');
+    var bwFrac=exerciseBwFrac(ex.name);
+    if(isWPU||factor!==1||bwFrac>0)needBw=true;
+    var bwAdd=isWPU?bw:0;
+    (ex.sets||[]).forEach(function(st){
+      var reps=parseInt(st&&st.reps,10);
+      if(!(reps>0))return;
+      // The bar, plus the part of the lifter that rises with it.
+      var load=((parseFloat(st.kg)||0)+bwAdd)*gear*factor + bwFrac*bw;
+      if(!(load>0))return;
+      joules+=load*KCAL_G*rom*reps;
+      counted++;
+    });
+  });
+  if(needBw&&!haveW)return null;
+  if(!counted||!(joules>0))return null;
+  return Math.round(joules*(1+KCAL_ECCENTRIC)/KCAL_EFFICIENCY/KCAL_JOULES);
+}
+function fmtKcal(k){return k==null?'':('~'+k.toLocaleString()+' kcal');}
 function _fmtDur(min){if(min==null||isNaN(min))return '';var h=Math.floor(min/60),m=Math.round(min%60);return h+':'+(m<10?'0':'')+m;}
 function scheduleDraft(){clearTimeout(_draftTimer);_draftTimer=setTimeout(saveDraft,800);}
 function saveDraft(){var d={v:2,day:document.getElementById('log-day').value,date:document.getElementById('log-date').value,weight:null,deload:!!_deloadActive,unit:unitLabel(),tmpl:{},custom:[],savedDate:new Date().toISOString().split('T')[0]};var c=document.getElementById('structured-log');if(!c){setData('wkt-draft',d);return;}c.querySelectorAll('.ex-card:not([data-custom="true"])').forEach(function(card){var ei=card.dataset.exIdx;if(ei==null)return;var sr=card.querySelector('.sets-row');var kg=[],reps=[];if(sr)Array.from(sr.children).forEach(function(div){var ki=div.querySelector('input[data-type="kg"]');var ri=div.querySelector('input[data-type="reps"]');kg.push(ki?ki.value:'');reps.push(ri?ri.value:'');});var td={kg:kg,reps:reps};if(card.dataset.swappedName)td.swapped=card.dataset.swappedName;if(card.dataset.gear&&parseFloat(card.dataset.gear)!==1)td.gear=card.dataset.gear;var _dk=card.dataset.tplName||String(ei);if(d.tmpl[_dk]!==undefined)_dk=_dk+'#'+ei;d.tmpl[_dk]=td;});c.querySelectorAll('.ex-card[data-custom="true"]').forEach(function(card){var ni=card.querySelector('[data-custom-name]');var nm=ni?ni.value:'';var sr=card.querySelector('.sets-row');var kg=[],reps=[];if(sr)Array.from(sr.children).forEach(function(div){var ki=div.querySelector('input[data-type="kg"]');var ri=div.querySelector('input[data-type="reps"]');kg.push(ki?ki.value:'');reps.push(ri?ri.value:'');});var cd={name:nm,kg:kg,reps:reps};if(card.dataset.gear&&parseFloat(card.dataset.gear)!==1)cd.gear=card.dataset.gear;d.custom.push(cd);});var _hasReps=Array.from(c.querySelectorAll('input[data-type="reps"]')).some(function(i){return parseInt(i.value)>0;});if(!_hasReps){if(localStorage.getItem('wkt-draft'))clearDraft();return;}if(_hasReps&&!_logStartedAt)_logStartedAt=new Date().toISOString();if(_logStartedAt)d.startedAt=_logStartedAt;setData('wkt-draft',d);fetch(AGENT_URL+'/workout-draft',{method:'PUT',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(d)}).catch(function(){});}
@@ -1584,8 +2011,8 @@ function prefillLog(day){var _di=getActiveProgramDay(parseInt(day));if(!_di)retu
 
 function removeExCard(btn){btn.closest('.ex-card').remove();}
 function swapExercise(btn){var card=btn.closest('.ex-card');var nameEl=card.querySelector('[data-ex-name]');if(!nameEl)return;var sel=document.createElement('select');sel.style.cssText='font-size:13px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--accent);border-radius:6px;padding:4px 8px;outline:none;cursor:pointer;max-width:170px;';sel.innerHTML='<option value="">— pick replacement —</option>'+EX_OPTS_HTML;var par=nameEl.parentNode;par.replaceChild(sel,nameEl);sel.focus();sel.onchange=function(){if(!this.value)return;nameEl.textContent=this.value;card.dataset.swappedName=this.value;_swapResetWeights(card,this.value);_refreshCardGearBtns(card,this.value);par.replaceChild(nameEl,sel);};sel.onblur=function(){setTimeout(function(){if(sel.parentNode)par.replaceChild(nameEl,sel);},200);};}function addSetToCard(card){var setsRow=card.querySelector('.sets-row');if(!setsRow)return;var n=setsRow.children.length+1;var exIdx=card.dataset.exIdx;var isCustom=card.dataset.custom==='true';var hasKg=setsRow.querySelector('input[data-type="kg"]')!==null;var lastKgInputs=setsRow.querySelectorAll('input[data-type="kg"]');var lastKg=lastKgInputs.length?lastKgInputs[lastKgInputs.length-1].value:'';var exAttr=(!isCustom&&exIdx!==undefined)?(' data-ex="'+exIdx+'" data-set="'+(n-1)+'"'):'';var div=document.createElement('div');div.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:38px;';div.innerHTML='<div style="font-size:12px;color:var(--text)">S'+n+'</div>'+(hasKg?('<input type="text" inputmode="decimal" value="'+lastKg+'" placeholder="'+unitLabel()+'"'+exAttr+' data-type="kg" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 2px;color:var(--accent);font-weight:600;text-align:center;font-size:13px;outline:none;">'):'<div style="font-size:11px;color:var(--muted);padding:8px 0">BW</div>')+'<input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="reps"'+exAttr+' data-type="reps" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 2px;color:var(--text);text-align:center;font-size:12px;outline:none;">';setsRow.appendChild(div);}function addSet(btn){addSetToCard(btn.closest('.ex-card'));}function removeSet(btn){var card=btn.closest('.ex-card');var setsRow=card.querySelector('.sets-row');if(setsRow&&setsRow.children.length>1)setsRow.removeChild(setsRow.lastElementChild);}function addCustomExercise(){var container=document.getElementById('structured-log');var card=document.createElement('div');card.className='ex-card';card.dataset.custom='true';card.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;';var s3='';for(var i=0;i<3;i++){s3+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:52px;"><div style="font-size:12px;color:var(--text)">S'+(i+1)+'</div><input type="text" inputmode="decimal" placeholder="'+unitLabel()+'" data-type="kg" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--accent);font-weight:600;text-align:center;font-size:16px;outline:none;"><input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="reps" data-type="reps" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--text);text-align:center;font-size:15px;outline:none;"></div>';}card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><select data-custom-name="1" onchange="onCustomExPicked(this)" style="font-size:13px;font-weight:600;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;flex:1;outline:none;cursor:pointer;min-width:0;"><option value="">— pick exercise —</option>'+EX_OPTS_HTML+'</select><button onclick="removeExCard(this)" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 0 0 10px;line-height:1;opacity:0.6">×</button></div><div class="sets-row" style="display:flex;gap:6px;overflow-x:auto;">'+s3+'</div><div class="card-btn-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"><button onclick="startRest(120)" style="background:none;border:1px solid var(--border);color:var(--accent);font-size:14px;font-weight:600;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--font-ui);margin-right:auto;">⏱ 2:00</button><button onclick="removeSet(this)" style="background:none;border:1px solid var(--border);color:var(--text);font-size:14px;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--font-ui);">− set</button><button onclick="addSet(this)" style="background:none;border:1px solid var(--border);color:var(--text);font-size:14px;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:var(--font-ui);">+ set</button></div>';var addBtn=container.querySelector('.add-ex-btn');if(addBtn){container.insertBefore(card,addBtn);}else{container.appendChild(card);}}function saveLog(){const date=document.getElementById('log-date').value;const _selDay=parseInt(document.getElementById('log-day').value);const container=document.getElementById('structured-log');const day=parseInt(container&&container.dataset.logDay)||_selDay;if(day!==_selDay){document.getElementById('log-day').value=day;}const weight=null;if(!date){alert('Please select a date');return;}const editId=parseInt(document.getElementById('log-edit-id').value)||null;var _today=new Date().toISOString().split('T')[0];if(!editId&&date!==_today){if(!confirm('Date is '+(date<_today?'in the past':'in the future')+' ('+formatDate(date)+').\nSave anyway?'))return;}const existingIdx=logs.findIndex(function(l){return l.date===date&&l.id!==editId;});if(existingIdx>=0&&!confirm('A workout for '+date+' is already saved. Overwrite it?'))return;var _saveDay=getActiveProgramDay(day);if(!_saveDay)return;var tmpl=_applyRehabSubs(_saveDay.exercises,getActiveProgram());const newSaved={};let totalVol=0;const exercises=tmpl.map((ex,exIdx)=>{const isBodyweight=ex.kg===0;const _exCard=container.querySelector('[data-ex-idx="'+exIdx+'"]');const gear=_exCard?parseFloat(_exCard.dataset.gear)||1:1;const kgInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="kg"]');const repsInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="reps"]');const sets=[];let lastKg=null;const _isWPU=/weighted\s*(pull|chin)/i.test((_exCard&&_exCard.dataset.swappedName)||ex.name);const _bwAdd=_isWPU?getBWForDate(date):0;repsInputs.forEach((rInput,i)=>{const reps=parseInt(rInput.value)||0;const kg=unitToKg(kgInputs[i]?.value)||0;sets.push({kg,reps});if(kg>0&&reps>0)lastKg=kg;if(reps>0&&(kg>0||_bwAdd>0))totalVol+=(kg+_bwAdd)*reps*gear;});const _exName=(_exCard&&_exCard.dataset.swappedName)||ex.name;const _bwCard=_exCard?_exCard.dataset.bw==='1':((ex.kg===0||isBWExName(ex.name))&&!_isWPU);if(lastKg!==null&&!_bwCard)newSaved[_exName]=lastKg;return{name:_exName,sets,...(gear!==1?{gear}:{})};});const customCards=container.querySelectorAll('.ex-card[data-custom="true"]');customCards.forEach(function(ccard){const ni=ccard.querySelector('[data-custom-name]');const cname=(ni&&ni.value.trim())||'Custom Exercise';const ckgI=ccard.querySelectorAll('input[data-type="kg"]');const crI=ccard.querySelectorAll('input[data-type="reps"]');const csets=[];const cgear=parseFloat(ccard.dataset.gear)||1;const _cbw=/weighted\s*(pull|chin)/i.test(cname)?getBWForDate(date):0;crI.forEach(function(ri,i){const reps=parseInt(ri.value)||0;const kg=unitToKg(ckgI[i]?ckgI[i].value:0)||0;csets.push({kg,reps});if(reps>0&&(kg>0||_cbw>0))totalVol+=(kg+_cbw)*reps*cgear;});if(csets.some(function(s){return s.reps>0;}))exercises.push(Object.assign({name:cname,sets:csets},cgear!==1?{gear:cgear}:{}));});setData('template_weights_day'+day,newSaved);var _allTW={};for(var _td=1;_td<=6;_td++){var _tdw=getData('template_weights_day'+_td,{});if(Object.keys(_tdw).length)_allTW[_td]=_tdw;}pushSettingsToAgent({'template_weights':_allTW});const notes=exercises.map(ex=>{const nonEmpty=ex.sets.filter(s=>s.reps>0);if(!nonEmpty.length)return null;const firstKg=nonEmpty[0].kg;const repsStr=nonEmpty.map(s=>s.reps).join('-');return firstKg>0?ex.name+' '+firstKg+'kg '+repsStr:ex.name+' '+repsStr;}).filter(Boolean).join('\n');var _timing={};if(editId){var _origT=logs.find(function(l){return l.id===editId;});if(_origT){if(_origT.started_at)_timing.started_at=_origT.started_at;if(_origT.ended_at)_timing.ended_at=_origT.ended_at;if(_origT.duration_min!=null)_timing.duration_min=_origT.duration_min;}}else if(_logStartedAt){var _endTs=new Date().toISOString();_timing.started_at=_logStartedAt;_timing.ended_at=_endTs;_timing.duration_min=Math.max(0,Math.round((Date.parse(_endTs)-Date.parse(_logStartedAt))/60000));}const newLog={date,day,weight:weight||null,volume:totalVol||null,notes,exercises:exercises.filter(function(ex){return ex.sets.some(function(s){return s.reps>0;});}),id:editId||Date.now(),..._timing};if(existingIdx>=0)logs.splice(existingIdx,1);if(editId){const origIdx=logs.findIndex(function(l){return l.id===editId;});if(origIdx>=0)logs.splice(origIdx,1);}document.getElementById('log-edit-id').value='';logs.unshift(newLog);setData('workout_logs',logs);clearDraft();_logStartedAt=null;pushWorkoutLogToAgent(newLog);
-let volMsg=totalVol?'\nVolume: '+(Math.round(totalVol/100)/10)+'t':'';var prFound=[];exercises.forEach(function(ex){var bestKg=0;ex.sets.forEach(function(s){if(s.kg>bestKg)bestKg=s.kg;});if(bestKg<=0)return;var prev=logs.slice(1).filter(function(l){return l.exercises;}).flatMap(function(l){return l.exercises||[];}).filter(function(e){return e.name===ex.name;}).map(function(e){var m=0;(e.sets||[]).forEach(function(s){if(s.kg>m)m=s.kg;});return m;});var prevBest=prev.length?Math.max.apply(null,prev):0;if(bestKg>prevBest&&prevBest>0)prFound.push(ex.name+' '+kgToUnit(bestKg)+unitLabel());});if(prFound.length){volMsg+='\n🏆 PR: '+prFound.join(', ');}if(weight&&weight>0){const _wIdx=weights.findIndex(function(w){return w.date===date;});if(_wIdx>=0)weights[_wIdx].weight=weight;else weights.push({date,weight});weights.sort((a,b)=>a.date.localeCompare(b.date));setData('weight_log',weights);updateCurrentWeight();pushWeightToAgent(date,weight);}var _nextDay=_nextTrainingDay();_selectedProgramDay=_nextDay;document.getElementById('log-day').value=_nextDay;prefillLog(_nextDay);rebuildDayGrid();alert('Workout saved! 💪'+volMsg);}
-function renderHistory(){const el=document.getElementById('history-list');if(!logs.length){el.innerHTML='<div class="empty"><div class="empty-icon">📋</div>No workouts logged yet.</div>';return;}el.innerHTML=logs.map(l=>`<div class="log-entry" onclick="showLogDetail(${l.id})" style="cursor:pointer"><div><div class="log-date">${formatDate(l.date)} · Day ${l.day}</div><div class="log-detail">${getDayLabel(l.day)}${l.volume?' · '+Math.round(l.volume/100)/10+'t':''}${l.duration_min!=null?' · ⏱ '+_fmtDur(l.duration_min):''}</div>${l.notes?`<div class="note-text">${l.notes.split('\n')[0]}${l.notes.split('\n').length>1?'...':''}</div>`:''}</div><div style="text-align:right">${l.weight?`<div class="log-weight">${kgToUnit(l.weight)}</div><div style="font-size:10px;color:var(--muted)">${unitLabel()}</div>`:''}<button class="btn btn-danger" onclick="event.stopPropagation();deleteLog(${l.id})" style="margin-top:6px">✕</button></div></div>`).join('');}
+let volMsg=totalVol?'\nVolume: '+(Math.round(totalVol/100)/10)+'t':'';var prFound=[];exercises.forEach(function(ex){var bestKg=0;ex.sets.forEach(function(s){if(s.kg>bestKg)bestKg=s.kg;});if(bestKg<=0)return;var prev=logs.slice(1).filter(function(l){return l.exercises;}).flatMap(function(l){return l.exercises||[];}).filter(function(e){return e.name===ex.name;}).map(function(e){var m=0;(e.sets||[]).forEach(function(s){if(s.kg>m)m=s.kg;});return m;});var prevBest=prev.length?Math.max.apply(null,prev):0;if(bestKg>prevBest&&prevBest>0)prFound.push(ex.name+' '+kgToUnit(bestKg)+unitLabel());});if(prFound.length){volMsg+='\n🏆 PR: '+prFound.join(', ');}if(weight&&weight>0){const _wIdx=weights.findIndex(function(w){return w.date===date;});if(_wIdx>=0)weights[_wIdx].weight=weight;else weights.push({date,weight});weights.sort((a,b)=>a.date.localeCompare(b.date));setData('weight_log',weights);updateCurrentWeight();pushWeightToAgent(date,weight);}var _nextDay=_nextTrainingDay();_selectedProgramDay=_nextDay;document.getElementById('log-day').value=_nextDay;prefillLog(_nextDay);rebuildDayGrid();var _kc=estimateSessionKcal(newLog);if(_kc!=null)volMsg+='\n🔥 '+fmtKcal(_kc);alert('Workout saved! 💪'+volMsg);}
+function renderHistory(){const el=document.getElementById('history-list');if(!logs.length){el.innerHTML='<div class="empty"><div class="empty-icon">📋</div>No workouts logged yet.</div>';return;}el.innerHTML=logs.map(l=>`<div class="log-entry" onclick="showLogDetail(${l.id})" style="cursor:pointer"><div><div class="log-date">${formatDate(l.date)} · Day ${l.day}</div><div class="log-detail">${getDayLabel(l.day)}${l.volume?' · '+Math.round(l.volume/100)/10+'t':''}${l.duration_min!=null?' · ⏱ '+_fmtDur(l.duration_min):''}${estimateSessionKcal(l)!=null?' · 🔥 '+fmtKcal(estimateSessionKcal(l)):''}</div>${l.notes?`<div class="note-text">${l.notes.split('\n')[0]}${l.notes.split('\n').length>1?'...':''}</div>`:''}</div><div style="text-align:right">${l.weight?`<div class="log-weight">${kgToUnit(l.weight)}</div><div style="font-size:10px;color:var(--muted)">${unitLabel()}</div>`:''}<button class="btn btn-danger" onclick="event.stopPropagation();deleteLog(${l.id})" style="margin-top:6px">✕</button></div></div>`).join('');}
 // Deleting a record removes it from the backend, not just this device — it is gone
 // from every device signed into this account, and there is no undo. Every delete of
 // a stored record asks with those words, so nobody learns it the hard way.
@@ -1593,7 +2020,7 @@ function confirmGlobalDelete(what){
   return confirm('Delete '+what+'?\n\nThis deletes it from your account on the backend, so it disappears from every device you are signed in on — not just this one. It cannot be undone.');
 }
 function deleteLog(id){if(!confirmGlobalDelete('this workout entry'))return;logs=logs.filter(l=>l.id!==id);setData('workout_logs',logs);fetch(AGENT_URL+'/workout-logs/'+id,{method:'DELETE',headers:authHeaders()}).catch(function(){});renderHistory();}
-function showLogDetail(id){var log=logs.find(function(l){return l.id==id;});if(!log)return;var html='';html+='<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">';html+='<div style="font-size:16px;font-weight:600;color:var(--text)">'+getDayLabel(log.day)+'</div>';var parts=[];if(log.volume)parts.push(Math.round(log.volume/100)/10+'t volume');if(log.weight)parts.push(log.weight+'kg body');if(log.duration_min!=null)parts.push('⏱ '+_fmtDur(log.duration_min));if(parts.length)html+='<div style="font-size:12px;color:var(--accent);margin-top:4px">'+parts.join(' · ')+'</div>';html+='</div>';if(log.exercises&&log.exercises.length){log.exercises.forEach(function(ex){var sets=(ex.sets||[]).filter(function(s){return s.reps>0;});if(!sets.length)return;html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;">';var firstKg=sets.find(function(s){return s.kg>0;});var schemeStr=sets.map(function(s){return s.reps;}).join('-');var kgStr=firstKg?firstKg.kg+'kg':'BW';html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';html+='<div style="font-size:14px;font-weight:600;color:var(--text)">'+ex.name+'</div>';html+='<div style="font-size:11px;color:var(--muted)">'+schemeStr+' '+kgStr+'</div>';html+='</div>';html+='<div style="display:flex;gap:6px;">';sets.forEach(function(s,i){var isBW=s.kg===0;html+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">';html+='<div style="font-size:12px;color:var(--text)">S'+(i+1)+'</div>';html+=(isBW?'<div style="font-size:11px;color:var(--muted);padding:8px 0">BW</div>':'<div style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--accent);font-weight:600;text-align:center;font-size:14px;">'+s.kg+'</div>');html+='<div style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--text);text-align:center;font-size:13px;">'+s.reps+'</div>';html+='</div>';});html+='</div>';html+='</div>';});}else if(log.notes){html+='<div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-line">'+log.notes+'</div>';}html+='<button class="btn" onclick="editLog('+log.id+')" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text);border:1px solid var(--border);">EDIT SESSION</button>';document.getElementById('logDetailContent').innerHTML=html;document.getElementById('logDetailTitle').textContent=formatDate(log.date);openModal('logDetailModal');}function editLog(id){var log=logs.find(function(l){return l.id==id;});if(!log)return;closeModal('logDetailModal');document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});document.getElementById('page-log').classList.add('active');document.querySelectorAll('.tabs .tab').forEach(function(b){b.classList.remove('active');});var _ltb=document.getElementById('tab-btn-log');if(_ltb)_ltb.classList.add('active');_currentPage='log';_currentPrimary='log';_setPrimaryActive('log');_applySubtabVis('log');document.getElementById('log-date').value=log.date;document.getElementById('log-day').value=log.day;var _lwv=document.getElementById('log-weight');if(log.weight&&_lwv)_lwv.value=log.weight;document.getElementById('log-edit-id').value=log.id;prefillLog(log.day);var tmpl=DAY_TEMPLATES[log.day]||[];var container=document.getElementById('structured-log');tmpl.forEach(function(ex,exIdx){var histEx=(log.exercises||[]).find(function(e){return e.name===ex.name;});if(!histEx)return;var kgInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="kg"]');var repsInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="reps"]');var tplCount=repsInputs.length;var isBW=ex.kg===0;histEx.sets.forEach(function(s,i){if(kgInputs[i]&&(s.kg>0||!isBW))kgInputs[i].value=s.kg>0?kgToUnit(s.kg):'';if(repsInputs[i])repsInputs[i].value=s.reps>0?s.reps:'';});if(histEx.sets.length>tplCount){var theCard=container.querySelector('[data-ex-idx="'+exIdx+'"]');if(theCard){for(var j=tplCount;j<histEx.sets.length;j++){addSetToCard(theCard);var allRi=theCard.querySelectorAll('input[data-type="reps"]');var allKi=theCard.querySelectorAll('input[data-type="kg"]');var s2=histEx.sets[j];if(allRi[j])allRi[j].value=s2.reps>0?s2.reps:'';if(allKi[j])allKi[j].value=s2.kg>0?kgToUnit(s2.kg):'';}}}});var tmplNames=tmpl.map(function(e){return e.name;});(log.exercises||[]).forEach(function(ex){if(tmplNames.indexOf(ex.name)>=0)return;if(!ex.sets.some(function(s){return s.reps>0;}))return;addCustomExercise();var cards=container.querySelectorAll('.ex-card[data-custom="true"]');var card=cards[cards.length-1];if(!card)return;var nameInput=card.querySelector('[data-custom-name]');if(nameInput){nameInput.value=ex.name;onCustomExPicked(nameInput);}if(ex.gear&&parseFloat(ex.gear)!==1)card.dataset.gear=ex.gear;var kgInputs=card.querySelectorAll('input[data-type="kg"]');var repsInputs=card.querySelectorAll('input[data-type="reps"]');ex.sets.forEach(function(s,i){if(i<3){if(kgInputs[i])kgInputs[i].value=s.kg>0?kgToUnit(s.kg):'';if(repsInputs[i])repsInputs[i].value=s.reps>0?s.reps:'';}});});}
+function showLogDetail(id){var log=logs.find(function(l){return l.id==id;});if(!log)return;var html='';html+='<div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">';html+='<div style="font-size:16px;font-weight:600;color:var(--text)">'+getDayLabel(log.day)+'</div>';var parts=[];if(log.volume)parts.push(Math.round(log.volume/100)/10+'t volume');if(log.weight)parts.push(log.weight+'kg body');if(log.duration_min!=null)parts.push('⏱ '+_fmtDur(log.duration_min));var _dkc=estimateSessionKcal(log);if(_dkc!=null)parts.push('🔥 '+fmtKcal(_dkc));if(parts.length)html+='<div style="font-size:12px;color:var(--accent);margin-top:4px">'+parts.join(' · ')+'</div>';html+='</div>';if(log.exercises&&log.exercises.length){log.exercises.forEach(function(ex){var sets=(ex.sets||[]).filter(function(s){return s.reps>0;});if(!sets.length)return;html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;">';var firstKg=sets.find(function(s){return s.kg>0;});var schemeStr=sets.map(function(s){return s.reps;}).join('-');var kgStr=firstKg?firstKg.kg+'kg':'BW';html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';html+='<div style="font-size:14px;font-weight:600;color:var(--text)">'+ex.name+'</div>';html+='<div style="font-size:11px;color:var(--muted)">'+schemeStr+' '+kgStr+'</div>';html+='</div>';html+='<div style="display:flex;gap:6px;">';sets.forEach(function(s,i){var isBW=s.kg===0;html+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">';html+='<div style="font-size:12px;color:var(--text)">S'+(i+1)+'</div>';html+=(isBW?'<div style="font-size:11px;color:var(--muted);padding:8px 0">BW</div>':'<div style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--accent);font-weight:600;text-align:center;font-size:14px;">'+s.kg+'</div>');html+='<div style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 4px;color:var(--text);text-align:center;font-size:13px;">'+s.reps+'</div>';html+='</div>';});html+='</div>';html+='</div>';});}else if(log.notes){html+='<div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-line">'+log.notes+'</div>';}html+='<button class="btn" onclick="editLog('+log.id+')" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text);border:1px solid var(--border);">EDIT SESSION</button>';document.getElementById('logDetailContent').innerHTML=html;document.getElementById('logDetailTitle').textContent=formatDate(log.date);openModal('logDetailModal');}function editLog(id){var log=logs.find(function(l){return l.id==id;});if(!log)return;closeModal('logDetailModal');document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});document.getElementById('page-log').classList.add('active');document.querySelectorAll('.tabs .tab').forEach(function(b){b.classList.remove('active');});var _ltb=document.getElementById('tab-btn-log');if(_ltb)_ltb.classList.add('active');_currentPage='log';_currentPrimary='log';_setPrimaryActive('log');_applySubtabVis('log');document.getElementById('log-date').value=log.date;document.getElementById('log-day').value=log.day;var _lwv=document.getElementById('log-weight');if(log.weight&&_lwv)_lwv.value=log.weight;document.getElementById('log-edit-id').value=log.id;prefillLog(log.day);var tmpl=DAY_TEMPLATES[log.day]||[];var container=document.getElementById('structured-log');tmpl.forEach(function(ex,exIdx){var histEx=(log.exercises||[]).find(function(e){return e.name===ex.name;});if(!histEx)return;var kgInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="kg"]');var repsInputs=container.querySelectorAll('input[data-ex="'+exIdx+'"][data-type="reps"]');var tplCount=repsInputs.length;var isBW=ex.kg===0;histEx.sets.forEach(function(s,i){if(kgInputs[i]&&(s.kg>0||!isBW))kgInputs[i].value=s.kg>0?kgToUnit(s.kg):'';if(repsInputs[i])repsInputs[i].value=s.reps>0?s.reps:'';});if(histEx.sets.length>tplCount){var theCard=container.querySelector('[data-ex-idx="'+exIdx+'"]');if(theCard){for(var j=tplCount;j<histEx.sets.length;j++){addSetToCard(theCard);var allRi=theCard.querySelectorAll('input[data-type="reps"]');var allKi=theCard.querySelectorAll('input[data-type="kg"]');var s2=histEx.sets[j];if(allRi[j])allRi[j].value=s2.reps>0?s2.reps:'';if(allKi[j])allKi[j].value=s2.kg>0?kgToUnit(s2.kg):'';}}}});var tmplNames=tmpl.map(function(e){return e.name;});(log.exercises||[]).forEach(function(ex){if(tmplNames.indexOf(ex.name)>=0)return;if(!ex.sets.some(function(s){return s.reps>0;}))return;addCustomExercise();var cards=container.querySelectorAll('.ex-card[data-custom="true"]');var card=cards[cards.length-1];if(!card)return;var nameInput=card.querySelector('[data-custom-name]');if(nameInput){nameInput.value=ex.name;onCustomExPicked(nameInput);}if(ex.gear&&parseFloat(ex.gear)!==1)card.dataset.gear=ex.gear;var kgInputs=card.querySelectorAll('input[data-type="kg"]');var repsInputs=card.querySelectorAll('input[data-type="reps"]');ex.sets.forEach(function(s,i){if(i<3){if(kgInputs[i])kgInputs[i].value=s.kg>0?kgToUnit(s.kg):'';if(repsInputs[i])repsInputs[i].value=s.reps>0?s.reps:'';}});});}
 function _weeklyFromStrSessions(sessions){const weekMap={};for(const s of sessions){const d=new Date(s.date+'T12:00:00');const dow=(d.getDay()+6)%7;const mon=new Date(d);mon.setDate(d.getDate()-dow);const wk=mon.toISOString().split('T')[0];weekMap[wk]=Math.max(weekMap[wk]||0,s.est1rm);}return Object.keys(weekMap).sort().map(wk=>({weekStart:wk,maxEst1rm:weekMap[wk]}));}
 function buildWeeklyGroupStrength(group,cutoffDays){return _weeklyFromStrSessions(buildSessionGroupStrength(group,cutoffDays));}function drawWeeklyStrengthGroupChart(canvasId,weeks,color,showLabels){const canvas=document.getElementById(canvasId);if(!canvas)return;const dpr=window.devicePixelRatio||1;const cssW=canvas.offsetWidth||300;const cssH=showLabels?130:100;canvas.width=cssW*dpr;canvas.height=cssH*dpr;canvas.style.width=cssW+'px';canvas.style.height=cssH+'px';const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);const PAD={top:showLabels?28:8,right:8,bottom:24,left:40};const cW=cssW-PAD.left-PAD.right;const cH=cssH-PAD.top-PAD.bottom;if(!weeks.length){ctx.fillStyle='#444';ctx.font='11px -apple-system,sans-serif';ctx.textAlign='left';ctx.fillText('No data yet',PAD.left+4,cssH/2);return;}const roll3=ewmaSmooth(weeks.map(w=>w.weekStart),weeks.map(w=>w.maxEst1rm),21);const allVals=[...weeks.map(w=>w.maxEst1rm),...roll3].filter(v=>v>0);if(!allVals.length)return;const maxV=Math.max(...allVals)*1.15;const minV=_chartScale==='absolute'?0:Math.max(0,Math.min(...allVals)*0.9);const range=maxV-minV||1;const n=weeks.length;const slotW=cW/n;const barW=Math.min(slotW*0.55,50);const xOf=i=>PAD.left+(i+0.5)*slotW;const yOf=v=>PAD.top+cH*(1-(v-minV)/range);ctx.strokeStyle='#2a2a2a';ctx.lineWidth=0.5;[minV+range*0.5,maxV].forEach(v=>{ctx.beginPath();ctx.moveTo(PAD.left,yOf(v));ctx.lineTo(PAD.left+cW,yOf(v));ctx.stroke();});ctx.fillStyle='#444';ctx.font='9px -apple-system,sans-serif';ctx.textAlign='right';[minV+range*0.5,maxV].forEach(v=>{ctx.fillText(Math.round(kgToUnit(v))+unitLabel(),PAD.left-3,yOf(v)+3);});weeks.forEach((w,i)=>{if(!w.maxEst1rm)return;const h=((w.maxEst1rm-minV)/range)*cH;ctx.fillStyle=color+'44';ctx.fillRect(xOf(i)-barW/2,PAD.top+cH-h,barW,h);});ctx.setLineDash([]);if(roll3.length>0){ctx.beginPath();weeks.forEach((w,i)=>{const x=xOf(i);const y=yOf(roll3[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineJoin='round';ctx.stroke();weeks.forEach((w,i)=>{ctx.beginPath();ctx.arc(xOf(i),yOf(roll3[i]),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();});}ctx.fillStyle='#555';ctx.font='8px -apple-system,sans-serif';ctx.textAlign='center';var _xLblLast2=-Infinity;weeks.forEach((w,i)=>{const x=xOf(i);if(x-_xLblLast2<44)return;_xLblLast2=x;const d=new Date(w.weekStart+'T12:00:00');const lbl='W'+getISOWeek(d)+' '+d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});ctx.fillText(lbl,x,PAD.top+cH+14);});if(showLabels&&roll3.length>0){const lv=roll3[roll3.length-1];ctx.fillStyle=color;ctx.font='bold 9px -apple-system,sans-serif';ctx.textAlign='right';ctx.fillText(Math.round(lv)+'kg 3wk avg',PAD.left+cW,PAD.top-5);}}function drawWeeklyStrengthCharts(){ensureVolumes();const days=strWindow||90;['legs','back','chest','shoulders','arms'].forEach((g,i)=>{const wks=buildWeeklyGroupStrength(g,days);drawWeeklyStrengthGroupChart('str-chart-'+g,wks,GROUP_COLORS[g],i===0);});}
 async function renderStrengthCharts(){if(_strViewMode==='weekly'){drawWeeklyStrengthCharts();return;}const days=strWindow||90;const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);const minDate=cutoff.toISOString().split('T')[0];const maxDate=new Date().toISOString().split('T')[0];const xDomain={minDate,maxDate};const allMarkers=await fetchAllMarkers();const visMs=allMarkers.filter(m=>m.date>=minDate&&m.date<=maxDate);['legs','back','chest','shoulders','arms'].forEach((g,i)=>{drawStrengthGroupChart('str-chart-'+g,buildSessionGroupStrength(g,days),GROUP_COLORS[g],xDomain,i===0,visMs);});}
@@ -1616,10 +2043,24 @@ var _expExercise='';
 function setExProgExercise(name){_expExercise=name;renderExerciseCharts();}
 // A legacy notes line is "<name> <kg>kg <reps>" or "<name> <reps>", so the name is
 // everything before the first number. Structured logs carry ex.name directly.
+// Pull-ups and Weighted Pull-ups are ONE movement, so they have ONE 1RM (Henrik,
+// 2026-08-08: they "differ, which obviously is impossible in reality"). Filed as two
+// catalogue entries they produced two numbers — 119kg and 132kg — from the same lift.
+// The picker groups them under the unweighted name; stripping a leading "Weighted" also
+// merges Weighted Chin-ups and Weighted Dips with their own base movement, and leaves
+// Chin-ups distinct from Pull-ups (a different grip, not a loading variant).
+// Only the MATCHING is canonical — the per-set maths still reads the raw stored name, so
+// a weighted set keeps adding body weight to its load and an unweighted one does not.
+// Both resolve to total system load, which is why they can share a series at all.
+function _exCanonName(name){return String(name||'').replace(/^\s*weighted\s+/i,'').trim();}
+// A 1RM estimated from a high-rep set is the unreliable input: rep-based formulas lose
+// accuracy fast above ~6 reps, and an AMRAP set of pull-ups is the worst case — that is
+// where the unrealistic 132kg came from. Only sets at or below this many reps contribute.
+const ONE_RM_MAX_REPS=6;
 function _exLineName(line){var t=String(line||'').trim();var m=t.match(/^(.*?)\s+\d/);return (m?m[1]:t).trim();}
-function logExerciseNames(){const seen={};for(const log of logs){if(log.exercises&&log.exercises.length){for(const ex of log.exercises){const n=String(ex.name||'').trim();if(n&&(ex.sets||[]).some(st=>st.reps>0))seen[n]=1;}}else if(log.notes){for(const line of log.notes.split('\n')){const n=_exLineName(line);if(n)seen[n]=1;}}}return Object.keys(seen).sort((a,b)=>a.localeCompare(b));}
-function buildSessionExVol(name,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let vol=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){if(String(ex.name||'').trim()!==name)continue;const splits=getExSplits(ex.name);const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const st of(ex.sets||[])){if(st.reps>0&&(st.kg>0||bwAdd>0))vol+=(st.kg+bwAdd)*st.reps*ef;}}}else if(log.notes){const bw=getBWForDate(log.date);for(const line of log.notes.split('\n')){if(_exLineName(line)!==name)continue;const ef2=getExSplits(line).factor||1;vol+=calcLineVol(line,bw)*ef2;}}if(vol>0)sessions.push({date:log.date,vol});}return sessions;}
-function buildSessionExStrength(name,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let best=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){if(String(ex.name||'').trim()!==name)continue;const splits=getExSplits(ex.name);const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const st of(ex.sets||[])){if(st.reps>0&&(st.kg>0||bwAdd>0)){const est=(st.kg+bwAdd)*ef*(1+Math.min(st.reps,10)/30);if(est>best)best=est;}}}}else if(log.notes){for(const line of log.notes.split('\n')){if(_exLineName(line)!==name)continue;const kgM=line.match(/(\d+(?:\.\d+)?)\s*kg/i);if(!kgM)continue;const kg=parseFloat(kgM[1]);const repsStr=line.slice(kgM.index+kgM[0].length).trim();const reps=parseInt(repsStr.split('-')[0])||0;if(!kg||!reps)continue;const est=kg*(1+Math.min(reps,10)/30);if(est>best)best=est;}}if(best>0)sessions.push({date:log.date,est1rm:best});}return sessions;}
+function logExerciseNames(){const seen={};for(const log of logs){if(log.exercises&&log.exercises.length){for(const ex of log.exercises){const n=_exCanonName(ex.name);if(n&&(ex.sets||[]).some(st=>st.reps>0))seen[n]=1;}}else if(log.notes){for(const line of log.notes.split('\n')){const n=_exCanonName(_exLineName(line));if(n)seen[n]=1;}}}return Object.keys(seen).sort((a,b)=>a.localeCompare(b));}
+function buildSessionExVol(name,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let vol=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){if(_exCanonName(ex.name)!==name)continue;const splits=getExSplits(ex.name);const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const st of(ex.sets||[])){if(st.reps>0&&(st.kg>0||bwAdd>0))vol+=(st.kg+bwAdd)*st.reps*ef;}}}else if(log.notes){const bw=getBWForDate(log.date);for(const line of log.notes.split('\n')){if(_exCanonName(_exLineName(line))!==name)continue;const ef2=getExSplits(line).factor||1;vol+=calcLineVol(line,bw)*ef2;}}if(vol>0)sessions.push({date:log.date,vol});}return sessions;}
+function buildSessionExStrength(name,cutoffDays){const cutoff=new Date();cutoff.setDate(cutoff.getDate()-cutoffDays);const cutoffStr=cutoff.toISOString().split('T')[0];const sessions=[];const sorted=[...logs].sort((a,b)=>a.date.localeCompare(b.date));for(const log of sorted){if(log.date<cutoffStr)continue;let best=0;if(log.exercises&&log.exercises.length){for(const ex of log.exercises){if(_exCanonName(ex.name)!==name)continue;const splits=getExSplits(ex.name);const ef=ex.gear!=null?parseFloat(ex.gear):(splits.factor||1);const isWPU=/weighted\s*(pull|chin)/i.test(ex.name);const bwAdd=isWPU?getBWForDate(log.date):0;for(const st of(ex.sets||[])){if(st.reps>0&&st.reps<=ONE_RM_MAX_REPS&&(st.kg>0||bwAdd>0)){const est=(st.kg+bwAdd)*ef*(1+Math.min(st.reps,10)/30);if(est>best)best=est;}}}}else if(log.notes){for(const line of log.notes.split('\n')){if(_exCanonName(_exLineName(line))!==name)continue;const kgM=line.match(/(\d+(?:\.\d+)?)\s*kg/i);if(!kgM)continue;const kg=parseFloat(kgM[1]);const repsStr=line.slice(kgM.index+kgM[0].length).trim();const reps=parseInt(repsStr.split('-')[0])||0;if(!kg||!reps||reps>ONE_RM_MAX_REPS)continue;const est=kg*(1+Math.min(reps,10)/30);if(est>best)best=est;}}if(best>0)sessions.push({date:log.date,est1rm:best});}return sessions;}
 function buildWeeklyExVol(name,cutoffDays){return _weeklyFromVolSessions(buildSessionExVol(name,cutoffDays));}
 function buildWeeklyExStrength(name,cutoffDays){return _weeklyFromStrSessions(buildSessionExStrength(name,cutoffDays));}
 // Colour the exercise by the muscle group it mostly trains, so a lift reads the same
@@ -1632,7 +2073,18 @@ function _exProgColor(name){const sp=getExSplits(name)||{};let bg=null,bv=0;['le
 // peaks at. An exercise with no in-window sets keeps its place at the bottom and shows no
 // 1RM rather than a misleading 0; picking it shows the empty state.
 // Ordering follows the window, so changing 30/60/90/All re-ranks the list.
-function _exProgRows(days){return logExerciseNames().map(function(n){const vol=buildSessionExVol(n,days).reduce(function(a,x){return a+x.vol;},0);const st=buildSessionExStrength(n,days);let best=0;st.forEach(function(x){if(x.est1rm>best)best=x.est1rm;});return{name:n,vol:vol,best:best};}).filter(function(r){
+function _exProgRows(days){return logExerciseNames().map(function(n){const vol=buildSessionExVol(n,days).reduce(function(a,x){return a+x.vol;},0);const st=buildSessionExStrength(n,days);
+  // The 1RM on the label is the BEST of the LATEST 5 SESSIONS (Henrik, 2026-08-08).
+  // Not a window-wide max: on a wide window that surfaced an old peak and read as a current
+  // capability ("152kg ... was probably true 5 months ago but not today"). Not the single
+  // latest session either: one light or deload day would drop the number for no real reason.
+  // Best-of-last-5 is current strength that survives a bad day.
+  // buildSessionExStrength returns sessions oldest-first, so the last 5 are the newest 5;
+  // slice(-5) is safe on shorter series and simply takes what exists.
+  // 5 sessions index-based, deliberately matching the volume chart's smoothing window —
+  // sessions, never calendar days, so a training break does not empty it.
+  const _recent=st.slice(-5);let oneRm=0;_recent.forEach(function(x){if(x.est1rm>oneRm)oneRm=x.est1rm;});
+  return{name:n,vol:vol,oneRm:oneRm};}).filter(function(r){
   // Hide anything with no volume in the window (Henrik, 2026-08-08). That covers both an
   // exercise not trained in this window and one only ever logged without a load, whose
   // charts would be blank anyway.
@@ -1642,7 +2094,7 @@ function _exProgRows(days){return logExerciseNames().map(function(n){const vol=b
   // explains the blank — the selection is never silently moved when the window narrows.
   return r.vol>0||r.name===_expExercise;
 }).sort(function(a,b){return (b.vol-a.vol)||a.name.localeCompare(b.name);});}
-function _exProgLabel(row){return row.best>0?(row.name+' — '+Math.round(kgToUnit(row.best))+unitLabel()):row.name;}
+function _exProgLabel(row){return row.oneRm>0?(row.name+' — '+Math.round(kgToUnit(row.oneRm))+unitLabel()):row.name;}
 function populateExerciseSelect(){const sel=document.getElementById('exp-select');if(!sel)return;const rows=_exProgRows(expWindow||90);const names=rows.map(function(r){return r.name;});if(!_expExercise||names.indexOf(_expExercise)<0)_expExercise=names[0]||'';while(sel.firstChild)sel.removeChild(sel.firstChild);if(!rows.length){const o=document.createElement('option');o.value='';o.textContent='No logged exercises yet';sel.appendChild(o);return;}rows.forEach(function(r){const o=document.createElement('option');o.value=r.name;o.textContent=_exProgLabel(r);if(r.name===_expExercise)o.selected=true;sel.appendChild(o);});}
 async function renderExerciseCharts(){ensureVolumes();populateExerciseSelect();const name=_expExercise;const days=expWindow||90;const volS=name?buildSessionExVol(name,days):[];const strS=name?buildSessionExStrength(name,days):[];const has=!!(volS.length||strS.length);const charts=document.getElementById('exp-charts');const empty=document.getElementById('exp-empty');if(charts)charts.classList.toggle('hidden',!has);if(empty)empty.classList.toggle('hidden',has);if(!has)return;const color=_exProgColor(name);const lv=document.getElementById('exp-lbl-vol');if(lv)lv.style.color=color;const ls=document.getElementById('exp-lbl-str');if(ls)ls.style.color=color;if(_expViewMode==='weekly'){drawWeeklyGroupChart('exp-chart-vol',_weeklyFromVolSessions(volS),color,true);drawWeeklyStrengthGroupChart('exp-chart-str',_weeklyFromStrSessions(strS),color,true);return;}const cutoff=new Date();cutoff.setDate(cutoff.getDate()-days);const minDate=cutoff.toISOString().split('T')[0];const maxDate=new Date().toISOString().split('T')[0];const xDomain={minDate,maxDate};const allMarkers=await fetchAllMarkers();const visMs=allMarkers.filter(m=>m.date>=minDate&&m.date<=maxDate);drawGroupChart('exp-chart-vol',volS,color,xDomain,visMs,true);drawStrengthGroupChart('exp-chart-str',strS,color,xDomain,true,visMs);}
 function showProgressTab(name,el){localStorage.setItem('wkt-progress-tab',name);document.querySelectorAll('.progress-panel').forEach(p=>p.classList.add('hidden'));document.querySelectorAll('.progress-tab').forEach(t=>t.classList.remove('active'));document.getElementById('ppanel-'+name).classList.remove('hidden');el.classList.add('active');const scaleRow=document.getElementById('chart-scale-row');if(scaleRow)scaleRow.style.display=(['volume','strength','exercise'].includes(name)?'flex':'none');document.querySelectorAll('.scale-btn').forEach(b=>b.classList.remove('scale-btn-active'));const sb=document.getElementById('scale-btn-'+_chartScale);if(sb)sb.classList.add('scale-btn-active');if(name==='overview'){drawChart();renderWeightHistory();drawBfChart();renderBfHistory();drawBmiChart();drawLbmChart();syncWeightsFromAgent();syncBodyCompFromAgent();}if(name==='volume'){const vvb=document.getElementById('volv-btn-'+_volViewMode);if(vvb)vvb.classList.add('scale-btn-active');drawVolumeChart();}if(name==='strength'){const svb=document.getElementById('strv-btn-'+_strViewMode);if(svb)svb.classList.add('scale-btn-active');renderStrengthCharts();}if(name==='exercise'){const evb=document.getElementById('expv-btn-'+_expViewMode);if(evb)evb.classList.add('scale-btn-active');renderExerciseCharts();}}
