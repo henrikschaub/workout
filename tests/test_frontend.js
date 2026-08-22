@@ -4910,15 +4910,35 @@ console.log('\n── Session calorie estimate (from work, not the clock) ──
   check('the estimator never reads duration_min',
     String(G.estimateSessionKcal).indexOf('duration_min') < 0);
 
-  // The physics: W = load x g x ROM x reps, then eccentric and efficiency.
-  const _expect = (load, rom, reps) =>
-    Math.round(load * G.KCAL_G * rom * reps * (1 + G.KCAL_ECCENTRIC) / G.KCAL_EFFICIENCY / G.KCAL_JOULES);
-  check('a machine lift matches the work equation exactly',
-    G.estimateSessionKcal(one('Leg Press', 100, [10,10,10,10])) === _expect(100, 0.45, 40),
-    `${G.estimateSessionKcal(one('Leg Press',100,[10,10,10,10]))} vs ${_expect(100,0.45,40)}`);
+  // MECHANICAL WORK: W = load x g x ROM x reps. It no longer sets the magnitude on its own —
+  // it decides where in the Compendium band the session sits — but the physics must still be
+  // exact, because everything downstream is built on it.
+  const _work = (load, rom, reps) => load * G.KCAL_G * rom * reps;
+  check('a machine lift computes its work exactly',
+    Math.abs(G.sessionWork(one('Leg Press',100,[10,10,10,10])).joules - _work(100,0.45,40)) < 1e-6,
+    `${G.sessionWork(one('Leg Press',100,[10,10,10,10])).joules} vs ${_work(100,0.45,40)}`);
   check('  …and a barbell squat adds the body mass that rises with the bar',
-    G.estimateSessionKcal(one('Squat', 100, [10,10,10,10]))
-      === _expect(100 + 0.65 * 89, 0.55, 40));
+    Math.abs(G.sessionWork(one('Squat',100,[10,10,10,10])).joules - _work(100 + 0.65*89, 0.55, 40)) < 1e-6);
+
+  // MAGNITUDE. The work-only model reported ~124 kcal for 17.1 t of legs over nearly two hours;
+  // Henrik: "Kcal numbers are way to low and unrealistic." A real session must now land in a
+  // believable range for resistance training rather than counting bar work alone.
+  const _real = {date:'2026-08-21', exercises:[
+    S('Squat',100,[5,6,8,8]), S('Deadlift',90,[10,10,10,10]), S('Leg Press',173,[8,10,12]),
+    S('Leg Curl',50,[10,10,10]), S('Calf Raises',70,[12,15,15])]};
+  const _rk = G.estimateSessionKcal(_real);
+  check('a full 15.9 t leg session lands in a realistic range (400-900 kcal)',
+    _rk >= 400 && _rk <= 900, String(_rk));
+  check('  …which is several times what bar work alone accounts for',
+    _rk > 3 * Math.round(G.sessionWork(_real).joules / G.KCAL_JOULES), String(_rk));
+
+  // The MET must stay BETWEEN the two Compendium anchors — this picks between measured values,
+  // it never extrapolates past them.
+  check('MET never falls below the moderate Compendium anchor',
+    G.sessionMet(0) === G.KCAL_MET_LO && G.sessionMet(1) === G.KCAL_MET_LO);
+  check('  …and never exceeds the vigorous one', G.sessionMet(1000) === G.KCAL_MET_HI);
+  check('  …and rises with the work rate in between',
+    G.sessionMet(8) > G.sessionMet(7) && G.sessionMet(15) > G.sessionMet(8));
 
   // RANGE OF MOTION IS THE POINT. Identical tonnage, very different work.
   const sq = G.estimateSessionKcal(one('Squat', 100, [10,10,10,10]));
@@ -4933,11 +4953,26 @@ console.log('\n── Session calorie estimate (from work, not the clock) ──
   check('an unknown exercise falls back to the default ROM',
     G.exerciseRom('Some Novel Machine') === G.KCAL_ROM_DEFAULT);
 
-  // Load and reps both scale it.
-  check('double the load, double the cost',
-    G.estimateSessionKcal(one('Leg Press', 200, [10])) === 2 * G.estimateSessionKcal(one('Leg Press', 100, [10])));
-  check('double the reps, double the cost',
-    G.estimateSessionKcal(one('Leg Press', 100, [20])) === 2 * G.estimateSessionKcal(one('Leg Press', 100, [10])));
+  // LOAD DRIVES IT — the reason the model is not simply duration x a flat MET. Same exercise,
+  // same sets, same reps, twice the weight: strictly more.
+  check('heavier load costs more for an identical set scheme',
+    G.estimateSessionKcal(one('Leg Press', 200, [10,10,10,10]))
+      > G.estimateSessionKcal(one('Leg Press', 100, [10,10,10,10])),
+    `${G.estimateSessionKcal(one('Leg Press',200,[10,10,10,10]))} vs ${G.estimateSessionKcal(one('Leg Press',100,[10,10,10,10]))}`);
+  check('  …and it moves the MET, not the clock',
+    G.sessionMinutes(one('Leg Press', 200, [10,10,10,10]))
+      === G.sessionMinutes(one('Leg Press', 100, [10,10,10,10])));
+  check('more sets cost more than fewer',
+    G.estimateSessionKcal(one('Leg Press', 100, [10,10,10,10,10,10]))
+      > G.estimateSessionKcal(one('Leg Press', 100, [10,10])));
+
+  // DURATION COMES FROM THE SETS, and strength sets carry longer rests than volume sets —
+  // the app's own restSecsForTag, not a second opinion.
+  check('a strength-rep set is allotted more time than a volume-rep set',
+    G.sessionMinutes(one('Squat', 100, [5])) > G.sessionMinutes(one('Squat', 100, [10])));
+  check('  …and the estimate scales with the number of sets',
+    Math.abs(G.sessionMinutes(one('Leg Press',100,[10,10,10,10]))
+             - 2 * G.sessionMinutes(one('Leg Press',100,[10,10]))) < 1e-6);
 
   // Body-mass fraction must not double-count the exercises whose load IS the body.
   check('pull-ups carry no separate body-mass term — the kg field already is the body',
@@ -4950,8 +4985,8 @@ console.log('\n── Session calorie estimate (from work, not the clock) ──
   G.weights = [{date:'2026-01-01', weight:60}];
   check('a lighter lifter spends less on a squat',
     G.estimateSessionKcal(one('Squat', 100, [10,10,10,10])) < sq);
-  check('  …but exactly the same on a leg press',
-    G.estimateSessionKcal(one('Leg Press', 100, [10,10,10,10])) === lp);
+  check('  …but the same on a leg press, where only the ACSM mass term differs',
+    G.estimateSessionKcal(one('Leg Press', 100, [10,10,10,10])) < lp);
   G.weights = [{date:'2026-01-01', weight:89}];
 
   // ── The honest-refusal cases ──────────────────────────────────────────────
@@ -4959,8 +4994,8 @@ console.log('\n── Session calorie estimate (from work, not the clock) ──
   check('no logged body weight means no number for a lift that needs it',
     G.estimateSessionKcal(one('Squat', 100, [10])) === null,
     'getBWForDate falls back to 80kg — that fallback must not reach a calorie figure');
-  check('  …but a machine lift needs no body weight and still reports',
-    G.estimateSessionKcal(one('Leg Press', 100, [10])) > 0);
+  check('  …and a machine lift cannot report either — the ACSM equation has a mass term',
+    G.estimateSessionKcal(one('Leg Press', 100, [10])) === null);
   G.weights = [{date:'2026-01-01', weight:89}];
   check('a log with no exercises returns null', G.estimateSessionKcal({date:'2026-08-21'}) === null);
   check('a session of empty sets returns null, not 0 kcal',

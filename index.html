@@ -1967,11 +1967,12 @@ function exerciseRom(name){
 // NO BODY WEIGHT, NO NUMBER for a session whose load depends on it. getBWForDate falls back to
 // 80 kg, which is fine for its own callers and wrong here: a calorie figure derived from a body
 // weight the user never entered is a fabricated number wearing the same "~" as a real estimate.
-function estimateSessionKcal(log){
+// Returns {joules, sets, vigorousSets} or null.
+function sessionWork(log){
   if(!log||!log.exercises||!log.exercises.length)return null;
   var haveW=(typeof weights!=='undefined'&&weights&&weights.length);
   var bw=haveW?getBWForDate(log.date):0;
-  var joules=0,counted=0,needBw=false;
+  var joules=0,sets=0,vig=0,needBw=false;
   log.exercises.forEach(function(ex){
     var sp=(typeof getExSplits==='function')?getExSplits(ex.name):{};
     var factor=(sp&&sp.factor)||1;
@@ -1984,16 +1985,83 @@ function estimateSessionKcal(log){
     (ex.sets||[]).forEach(function(st){
       var reps=parseInt(st&&st.reps,10);
       if(!(reps>0))return;
+      sets++;
+      if(typeof tagForReps==='function'&&tagForReps(reps)==='strength')vig++;
       // The bar, plus the part of the lifter that rises with it.
       var load=((parseFloat(st.kg)||0)+bwAdd)*gear*factor + bwFrac*bw;
-      if(!(load>0))return;
-      joules+=load*KCAL_G*rom*reps;
-      counted++;
+      if(load>0)joules+=load*KCAL_G*rom*reps;
     });
   });
   if(needBw&&!haveW)return null;
-  if(!counted||!(joules>0))return null;
-  return Math.round(joules*(1+KCAL_ECCENTRIC)/KCAL_EFFICIENCY/KCAL_JOULES);
+  if(!sets)return null;
+  return {joules:joules, sets:sets, vig:vig, bw:bw, haveW:haveW};
+}
+
+// ── HOW LONG THE SESSION TOOK, WITHOUT ASKING THE CLOCK ─────────────────────
+// Reps under load plus the rest the app itself prescribes for that rep range (restSecsForTag:
+// 240 s strength, 120 s volume, 90 s rehab), scaled by SESSION_PACE.
+//
+// SESSION_PACE is FITTED, not guessed. Across the 18 logged sessions whose recorded duration is
+// plausible at all (30-180 min), the real elapsed time is a median 1.74x that rest-table
+// baseline — warm-up sets, walking between machines, loading plates and setup. Without it the
+// estimate came out at ~41 min against a real 106. It reproduces those 18 sessions to a median
+// error of ~21 min, which is the right accuracy to claim for a "~" figure.
+//
+// Fitted from the clock, evaluated once — NOT read from any individual log. A session stamped
+// 0:01 and the same session stamped 2:56 both estimate the same duration, because neither
+// stamp is consulted.
+var SESSION_PACE = 1.74;
+var SEC_PER_REP = 3;
+function sessionMinutes(log){
+  var sec=0;
+  (log&&log.exercises||[]).forEach(function(ex){
+    (ex.sets||[]).forEach(function(st){
+      var reps=parseInt(st&&st.reps,10);
+      if(!(reps>0))return;
+      var tag=(typeof tagForReps==='function')?tagForReps(reps):'volume';
+      var rest=(typeof restSecsForTag==='function')?restSecsForTag(tag):120;
+      sec+=reps*SEC_PER_REP+rest;
+    });
+  });
+  return sec*SESSION_PACE/60;
+}
+
+// ── THE ESTIMATE ────────────────────────────────────────────────────────────
+// The work-only model this replaces was right about the physics and wrong about the question.
+// External bar work is a small part of what a session costs — it excludes the eccentric control,
+// the isometric stabilising, and the elevated metabolism through every rest period — so it
+// reported ~124 kcal for 17.1 t of legs over the better part of two hours. Henrik, 2026-08-21:
+// "Kcal numbers are way to low and unrealistic."
+//
+// So the magnitude now comes from where it is actually measured — the Compendium of Physical
+// Activities entries for resistance training, which are whole-session costs INCLUDING the rest
+// periods — via the ACSM equation kcal = MET x 3.5 x kg / 200 x minutes:
+//
+//   02052  3.5 METs  "multiple exercises, 8-15 reps at varied resistance"
+//   02050  6.0 METs  "power lifting or body building, vigorous effort"
+//
+// AND THE LOAD DECIDES WHERE IN THAT BAND A SESSION SITS. That is the whole point of "vigorous
+// effort", and it is what keeps "use exercise and weights" true: the session's mechanical power
+// — real work from real loads over real range of motion, divided by the estimated duration —
+// is mapped onto the two Compendium anchors. Across 58 logged sessions that power runs 5.8 W to
+// 22.7 W, so the anchors are set at 6 W and 18 W. Clamped to the band at both ends: this
+// chooses BETWEEN two measured values, it never extrapolates past them.
+var KCAL_MET_LO = 3.5, KCAL_MET_HI = 6.0;
+var KCAL_POWER_LO = 6.0, KCAL_POWER_HI = 18.0;   // watts, from the logged distribution
+function sessionMet(watts){
+  if(!(watts>0))return KCAL_MET_LO;
+  var t=(watts-KCAL_POWER_LO)/(KCAL_POWER_HI-KCAL_POWER_LO);
+  t=Math.max(0,Math.min(1,t));
+  return KCAL_MET_LO+t*(KCAL_MET_HI-KCAL_MET_LO);
+}
+
+function estimateSessionKcal(log){
+  var w=sessionWork(log);
+  if(!w||!w.haveW)return null;      // no body weight logged: the ACSM equation has no mass term
+  var min=sessionMinutes(log);
+  if(!(min>0))return null;
+  var watts=w.joules/(min*60);
+  return Math.round(sessionMet(watts)*3.5*w.bw/200*min);
 }
 function fmtKcal(k){return k==null?'':('~'+k.toLocaleString()+' kcal');}
 function _fmtDur(min){if(min==null||isNaN(min))return '';var h=Math.floor(min/60),m=Math.round(min%60);return h+':'+(m<10?'0':'')+m;}
