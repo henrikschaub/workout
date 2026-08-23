@@ -64,6 +64,7 @@ const patched = rawScript
   .replace('const GROUP_COLORS=',    'var GROUP_COLORS=')
   .replace('const ONE_RM_MAX_REPS=', 'var ONE_RM_MAX_REPS=')
   .replace('const EX_OPTS_HTML=',    'var EX_OPTS_HTML=')
+  .replace('const REHAB_CONDITIONS=', 'var REHAB_CONDITIONS=')
   .replace('const DAYS=',            'var DAYS=')
   .replace('const DAY_TEMPLATES=',   'var DAY_TEMPLATES=')
   .replace('const THEMES=',          'var THEMES=')
@@ -3043,7 +3044,10 @@ console.log('\n── Injury substitutions (baked) ─────────�
   const allNames = (p) => p.days.flatMap(d => d.exercises.map(e => e.name));
   // Shoulders: no barbell/DB/smith presses anywhere; machine/landmine alternatives present
   const ps = G._generateWorkoutProgram('hypertrophy', 'balanced', 6, 'T', 10, ['shoulders']);
-  const shoulderBad = allNames(ps).filter(n => /^(Bench Press|Incline Bench Press|Overhead Press|Push Press|Arnold Press)$/i.test(n) || (/\b(barbell|dumbbell|\bdb\b|smith)\b/i.test(n) && /\bpress\b/i.test(n)));
+  // Incline DB Press is the exception (Henrik, 2026-08-22): it is what the shoulders condition
+  // substitutes incline pressing TO, so a DB incline in a shoulder-injury program is the fix,
+  // not a violation. Everything else barbell/DB/Smith is still aggravating.
+  const shoulderBad = allNames(ps).filter(n => !/^incline db press$/i.test(n) && (/^(Bench Press|Incline Bench Press|Overhead Press|Push Press|Arnold Press)$/i.test(n) || (/\b(barbell|dumbbell|\bdb\b|smith)\b/i.test(n) && /\bpress\b/i.test(n))));
   check('shoulders injury: no aggravating presses in program', shoulderBad.length === 0, shoulderBad.join(', '));
   // Arnold Press specifically (loaded internal rotation + elevation = impingement position)
   const pArn = G._generateWorkoutProgram('hypertrophy', 'upper', 7, 'T', 15, ['shoulders']);
@@ -5011,6 +5015,432 @@ console.log('\n── Session calorie estimate (from work, not the clock) ──
   check('the History list uses it too', String(G.renderHistory).indexOf('estimateSessionKcal') >= 0);
   check('the session detail uses it too', String(G.showLogDetail).indexOf('estimateSessionKcal') >= 0);
   G.weights = _savedW;
+}
+
+// ── Section: mid-workout exercise change + blank-exercise save guard ─────────
+// Swapping an exercise that already has completed sets must keep those sets on the
+// exercise that was actually performed, and put the replacement in its own card
+// directly underneath. Saving with an exercise left blank must ask first.
+console.log('\n── Swap keeps completed sets / blank-exercise save guard ───');
+{
+  const mkInput = v => ({ value: v, dataset: { type: 'reps' }, _focused: false, focus() { this._focused = true; } });
+  const mkCol = (reps, label) => {
+    const inp = mkInput(reps);
+    const col = {
+      _inp: inp,
+      firstElementChild: { textContent: label },
+      querySelector: sel => (sel.includes('reps') ? inp : null),
+      remove() { const i = col._parent.children.indexOf(col); if (i >= 0) col._parent.children.splice(i, 1); },
+      _parent: null,
+    };
+    return col;
+  };
+  const mkCard = (repsArr, ds) => {
+    const cols = repsArr.map((r, i) => mkCol(r, 'S' + (i + 1)));
+    const sr = { children: cols };
+    cols.forEach(c => { c._parent = sr; });
+    const card = {
+      dataset: ds || {},
+      _sr: sr,
+      _scrolled: false,
+      scrollIntoView() { card._scrolled = true; },
+      querySelector(sel) {
+        if (sel === '.sets-row') return sr;
+        if (sel.includes('custom-name')) return card._nameSel || null;
+        if (sel.includes('reps')) return sr.children.length ? sr.children[0]._inp : null;
+        if (sel.includes('data-ex-name')) return card._nameEl || null;
+        return null;
+      },
+    };
+    return card;
+  };
+
+  // _exCardName — where a card's name comes from
+  check('_exCardName reads the template name',
+    G._exCardName(mkCard(['', ''], { tplName: 'Squat' })) === 'Squat');
+  check('_exCardName prefers the swapped name over the template name',
+    G._exCardName(mkCard([''], { tplName: 'Squat', swappedName: 'Leg Press' })) === 'Leg Press');
+  {
+    const cc = mkCard(['', '', '']);
+    cc.dataset.custom = 'true';
+    cc._nameSel = { value: ' Lat Pulldown ' };
+    check('_exCardName reads a custom card from its picker', G._exCardName(cc) === 'Lat Pulldown');
+    cc._nameSel = { value: '' };
+    check('_exCardName returns "" for a custom card with nothing picked yet', G._exCardName(cc) === '');
+  }
+  check('_exCardName is a no-op on null', G._exCardName(null) === '');
+
+  // _cardHasCompletedSets — a set counts only when reps > 0
+  check('a card with a filled rep box has completed sets',
+    G._cardHasCompletedSets(mkCard(['8', '', ''], { tplName: 'Squat' })) === true);
+  check('a card with only blank rep boxes has none',
+    G._cardHasCompletedSets(mkCard(['', '', ''], { tplName: 'Squat' })) === false);
+  check('reps of 0 is not a completed set',
+    G._cardHasCompletedSets(mkCard(['0', '0'], { tplName: 'Squat' })) === false);
+
+  // _trimEmptySets — the swapped-from card keeps exactly what was done
+  {
+    const card = mkCard(['10', '', '8', ''], { tplName: 'Squat' });
+    const removed = G._trimEmptySets(card);
+    check('_trimEmptySets returns how many blank sets it dropped', removed === 2, String(removed));
+    check('_trimEmptySets keeps only the completed sets', card._sr.children.length === 2);
+    check('_trimEmptySets keeps the reps that were logged',
+      card._sr.children.map(c => c._inp.value).join(',') === '10,8');
+    check('_trimEmptySets renumbers the remaining set labels',
+      card._sr.children.map(c => c.firstElementChild.textContent).join(',') === 'S1,S2');
+  }
+  {
+    const card = mkCard(['', '', ''], { tplName: 'Squat' });
+    check('_trimEmptySets leaves an untouched card alone', G._trimEmptySets(card) === 0 && card._sr.children.length === 3);
+  }
+
+  // The swap handler itself
+  {
+    const fn = String(G.swapExercise || '');
+    check('swapExercise checks for completed sets before renaming the card',
+      fn.includes('_cardHasCompletedSets(card)') &&
+      fn.indexOf('_cardHasCompletedSets(card)') < fn.indexOf('_swapResetWeights'));
+    check('swapExercise trims the blank sets off the card it keeps',
+      fn.includes('_trimEmptySets(card)'));
+    check('swapExercise adds the replacement as its own card',
+      fn.includes('_addSwapCardAfter(card,'));
+    check('swapExercise persists the draft after a set-preserving swap',
+      fn.includes('scheduleDraft()'));
+    check('swapExercise still renames in place when nothing was completed yet',
+      fn.includes('card.dataset.swappedName=this.value'));
+  }
+  {
+    const fn = String(G._addSwapCardAfter || '');
+    check('_addSwapCardAfter inserts the new card directly under the current one',
+      fn.includes('card.nextSibling'));
+    check('_addSwapCardAfter pre-selects the replacement exercise',
+      fn.includes('onCustomExPicked(sel)'));
+    check('_addSwapCardAfter sizes the new card to the sets that were left',
+      fn.includes('addSetToCard(nc)'));
+  }
+
+  // _incompleteExCards / _focusFirstIncompleteEx
+  {
+    const done  = mkCard(['10', '10'], { tplName: 'Squat' });
+    const blank = mkCard(['', ''], { tplName: 'Leg Press' });
+    const unnamed = mkCard(['', '']); unnamed.dataset.custom = 'true'; unnamed._nameSel = { value: '' };
+    _idStore['structured-log'] = { querySelectorAll: sel => (sel === '.ex-card' ? [done, blank, unnamed] : []) };
+    const list = G._incompleteExCards();
+    check('_incompleteExCards flags only the exercise with no reps',
+      list.length === 1 && list[0] === blank, `got ${list.length}`);
+    check('_incompleteExCards ignores a custom card with no exercise picked',
+      list.indexOf(unnamed) < 0);
+    check('_focusFirstIncompleteEx returns true and scrolls to the first blank card',
+      G._focusFirstIncompleteEx() === true && blank._scrolled === true);
+    check('_focusFirstIncompleteEx focuses its first rep box',
+      blank._sr.children[0]._inp._focused === true);
+    _idStore['structured-log'] = { querySelectorAll: () => [done] };
+    check('_focusFirstIncompleteEx returns false when nothing is blank',
+      G._focusFirstIncompleteEx() === false);
+    delete _idStore['structured-log'];
+  }
+
+  // saveLog wiring
+  {
+    const fn = String(G.saveLog || '');
+    check('saveLog asks about exercises with no reps filled in',
+      fn.includes('_incompleteExCards()') && fn.includes('Is that intentional?'));
+    check('saveLog sends the user to the first blank exercise on Cancel',
+      fn.includes('_focusFirstIncompleteEx();return;'));
+    check('saveLog names the blank exercises in the prompt',
+      fn.includes('_blank.map(_exCardName)'));
+    check('saveLog asks before the overwrite/date prompts, not after the log is built',
+      fn.indexOf('_incompleteExCards()') < fn.indexOf('already saved. Overwrite it?'));
+  }
+}
+
+// ── Section: history prefill (last logged set) + custom card position ────────
+// A card picked mid-workout starts on the weight from the LAST set actually logged
+// for that exercise, and a swapped-in / added exercise stays where it was put when
+// the draft is restored.
+console.log('\n── Prefill from last logged set / draft card position ──────');
+{
+  const _savedLogs = G.logs;
+  const _savedDeload = G._deloadActive;
+  const _savedUnit = G.localStorage.getItem('wkt-unit');
+
+  // getLastKgFromLogs — the last working set, not the heaviest
+  G.logs = [
+    { date: '2026-08-20', exercises: [
+      { name: 'Bench Press', sets: [{kg:60,reps:12},{kg:80,reps:8},{kg:70,reps:10}] },
+      { name: 'Pull-ups',    sets: [{kg:0,reps:10},{kg:0,reps:8}] },
+      { name: 'Weighted Pull-ups', sets: [{kg:10,reps:8},{kg:15,reps:5}] },
+      { name: 'Warmup Only', sets: [{kg:40,reps:0}] },
+    ]},
+    { date: '2026-08-13', exercises: [{ name: 'Bench Press', sets: [{kg:100,reps:3}] }] },
+  ];
+  check('getLastKgFromLogs defined', typeof G.getLastKgFromLogs === 'function');
+  check('getLastKgFromLogs returns the last logged set, not the heaviest',
+    G.getLastKgFromLogs('Bench Press') === 70, `got ${G.getLastKgFromLogs('Bench Press')}`);
+  check('getBestKgFromLogs still returns the heaviest (unchanged)',
+    G.getBestKgFromLogs('Bench Press') === 80, `got ${G.getBestKgFromLogs('Bench Press')}`);
+  check('getLastKgFromLogs reads the most recent session first',
+    G.getLastKgFromLogs('Bench Press') !== 100);
+  check('getLastKgFromLogs skips a set that was never performed (reps 0)',
+    G.getLastKgFromLogs('Warmup Only') === null);
+  check('getLastKgFromLogs on a pure bodyweight lift → null', G.getLastKgFromLogs('Pull-ups') === null);
+  check('getLastKgFromLogs on Weighted Pull-ups returns the added weight',
+    G.getLastKgFromLogs('Weighted Pull-ups') === 15);
+  check('getLastKgFromLogs on an unknown exercise → null', G.getLastKgFromLogs('Unknown XYZ') === null);
+  {
+    const _l = G.logs; G.logs = [];
+    check('getLastKgFromLogs with no logs → null', G.getLastKgFromLogs('Bench Press') === null);
+    G.logs = [{ date: '2026-08-20', notes: 'no exercises key' }];
+    check('getLastKgFromLogs tolerates a notes-only log', G.getLastKgFromLogs('Bench Press') === null);
+    G.logs = _l;
+  }
+
+  // _prefillKgFromHistory / _clearAutoPrefill
+  const mkKgCard = vals => {
+    const inputs = vals.map(v => ({ value: v, dataset: { type: 'kg' } }));
+    return { dataset: {}, _inputs: inputs, querySelectorAll: sel => (sel.includes('kg') ? inputs : []) };
+  };
+  {
+    const card = mkKgCard(['', '', '']);
+    G._prefillKgFromHistory(card, 'Bench Press');
+    check('_prefillKgFromHistory fills every empty kg box with the last logged weight',
+      card._inputs.every(i => i.value === '70'), JSON.stringify(card._inputs.map(i => i.value)));
+    check('_prefillKgFromHistory records what it filled in, so a re-pick can clear it',
+      card.dataset.prefillKg === '70', String(card.dataset.prefillKg));
+  }
+  {
+    const card = mkKgCard(['85', '']);
+    G._prefillKgFromHistory(card, 'Bench Press');
+    check('_prefillKgFromHistory never overwrites a weight the user typed',
+      card._inputs[0].value === '85' && card._inputs[1].value === '70');
+  }
+  {
+    const card = mkKgCard(['', '']);
+    G._prefillKgFromHistory(card, 'Pull-ups');
+    check('_prefillKgFromHistory leaves a bodyweight lift to the body-weight prefill',
+      card._inputs.every(i => i.value === '') && card.dataset.prefillKg === undefined);
+  }
+  {
+    const card = mkKgCard(['', '']);
+    G._prefillKgFromHistory(card, 'Never Done This');
+    check('_prefillKgFromHistory does nothing when the exercise has no history',
+      card._inputs.every(i => i.value === ''));
+  }
+  {
+    G._deloadActive = true;
+    const card = mkKgCard(['']);
+    G._prefillKgFromHistory(card, 'Bench Press');
+    check('_prefillKgFromHistory deloads the prefill when a deload is active',
+      card._inputs[0].value === String(G.roundBarbellKg(G._deloadKg(70))), card._inputs[0].value);
+    check('  …and rounds a barbell lift to a loadable weight',
+      G.roundBarbellKg(G._deloadKg(70)) === 45, String(G.roundBarbellKg(G._deloadKg(70))));
+    G._deloadActive = _savedDeload;
+  }
+  {
+    const card = mkKgCard(['70', '90']);
+    card.dataset.prefillKg = '70';
+    G._clearAutoPrefill(card);
+    check('_clearAutoPrefill clears only the boxes still holding the auto value',
+      card._inputs[0].value === '' && card._inputs[1].value === '90');
+    check('_clearAutoPrefill forgets the prefill marker', card.dataset.prefillKg === undefined);
+    const untouched = mkKgCard(['80']);
+    G._clearAutoPrefill(untouched);
+    check('_clearAutoPrefill is a no-op on a card that was never prefilled',
+      untouched._inputs[0].value === '80');
+  }
+
+  // Wiring: both ways of putting an exercise on a card get the prefill
+  {
+    const fn = String(G.onCustomExPicked || '');
+    check('onCustomExPicked prefills the picked exercise from history',
+      fn.includes('_prefillKgFromHistory(card,sel.value)'));
+    check('onCustomExPicked drops the previous auto-prefill before re-picking',
+      fn.indexOf('_clearAutoPrefill') < fn.indexOf('_prefillKgFromHistory'));
+    check('onCustomExPicked still refreshes the gear buttons',
+      fn.includes('_refreshCardGearBtns(card,sel.value)'));
+  }
+  {
+    const fn = String(G.swapExercise || '');
+    check('a rename-in-place swap prefills the new exercise too',
+      fn.includes('_prefillKgFromHistory(card,this.value)'));
+    check('…still after the old load is cleared, never before',
+      fn.indexOf('_swapResetWeights') < fn.indexOf('_prefillKgFromHistory'));
+  }
+
+  // Draft: a custom card keeps its position
+  {
+    const sd = String(G.saveDraft || '');
+    check('saveDraft records where each custom card sits', sd.includes('cd.pos=_pos'));
+    check('saveDraft indexes the custom card against ALL cards, not just the custom ones',
+      sd.includes("_allCards=Array.prototype.slice.call(c.querySelectorAll('.ex-card'))"));
+    const rd = String(G.restoreDraft || '');
+    check('restoreDraft puts each custom card back at its saved index',
+      rd.includes('_restoreCustomCardPos(c,card,cx.pos)'));
+  }
+  {
+    const mkNode = id => ({ id });
+    const mkContainer = nodes => ({
+      _nodes: nodes,
+      querySelectorAll: sel => (sel === '.ex-card' ? container._nodes : []),
+      insertBefore(node, ref) {
+        const cur = container._nodes.indexOf(node);
+        if (cur >= 0) container._nodes.splice(cur, 1);
+        const at = container._nodes.indexOf(ref);
+        container._nodes.splice(at < 0 ? container._nodes.length : at, 0, node);
+      },
+    });
+    const a = mkNode('tpl-a'), b = mkNode('tpl-b'), c3 = mkNode('tpl-c'), swapped = mkNode('swapped');
+    var container = mkContainer([a, b, c3, swapped]);
+    G._restoreCustomCardPos(container, swapped, 1);
+    check('_restoreCustomCardPos moves the card from the bottom back to its slot',
+      container._nodes.map(n => n.id).join(',') === 'tpl-a,swapped,tpl-b,tpl-c',
+      container._nodes.map(n => n.id).join(','));
+    const tail = mkNode('tail');
+    container = mkContainer([a, b, tail]);
+    G._restoreCustomCardPos(container, tail, 9);
+    check('_restoreCustomCardPos leaves the card at the end when its index is past the list',
+      container._nodes.map(n => n.id).join(',') === 'tpl-a,tpl-b,tail');
+    container = mkContainer([a, b, tail]);
+    G._restoreCustomCardPos(container, tail, undefined);
+    check('_restoreCustomCardPos leaves an older draft (no saved position) alone',
+      container._nodes.map(n => n.id).join(',') === 'tpl-a,tpl-b,tail');
+  }
+
+  G.logs = _savedLogs;
+  G._deloadActive = _savedDeload;
+  if (_savedUnit === null) G.localStorage.removeItem('wkt-unit'); else G.localStorage.setItem('wkt-unit', _savedUnit);
+}
+
+// ── Section: every pull day opens with a pull-up variant ─────────────────────
+// Regression (2026-08-22): the 6-day `hypertrophy-balanced` pool authored Day 5 — Pull B
+// with no pull-up variant at all — it opened with Cable Row. The hoist in
+// _generateWorkoutProgram can only REORDER a pull-up that exists, so a pool that never
+// carried one silently shipped a pull day led by a row, against "Pull-ups lead every pull
+// day" (2026-08-08). Henrik hit it on 6-day hypertrophy, shoulder injury, 16 sets/week.
+console.log('\n── Pull days open with a pull-up variant ──────────────────');
+{
+  const isPullDayName = nm => /pull/i.test(nm) && !/push/i.test(nm) && !/legs|lower/i.test(nm);
+
+  // The exact program from the report
+  {
+    const prog = G._generateWorkoutProgram('hypertrophy', 'balanced', 6, 'Repro', 16, ['shoulders']);
+    const pullB = (prog.days || []).find(d => /Pull B/.test(d.name || ''));
+    check('6-day balanced hypertrophy still has a Day 5 — Pull B', !!pullB);
+    const first = pullB && (pullB.exercises || [])[0];
+    check('Pull B opens with Weighted Pull-ups, not Cable Row',
+      !!first && first.name === 'Weighted Pull-ups', first && first.name);
+    check('the opening pull-up is a pull-up variant by isPullUpEx',
+      !!first && G.isPullUpEx(first.name));
+    check('it is prescribed in the strength band, so applyTagFromReps keeps the tag',
+      !!first && first.tag === 'strength' && /^[2-6](-[2-6])*$/.test(String(first.sets)),
+      first && `${first.tag} / ${first.sets}`);
+    check('a shoulder injury does not substitute the pull-up away',
+      (pullB.exercises || []).some(e => G.isPullUpEx(e.name)));
+  }
+
+  // It must survive every volume the allocator can be asked for — the low end drops
+  // exercises to fit, the high end resizes them, and neither may lose the pull-up.
+  {
+    let missing = [], notFirst = [];
+    [['hypertrophy','balanced'], ['hypertrophy','upper']].forEach(([goal, sub]) => {
+      [8, 10, 12, 16, 20, 25].forEach(spm => {
+        [[], ['shoulders']].forEach(inj => {
+          const prog = G._generateWorkoutProgram(goal, sub, 6, 'V', spm, inj);
+          (prog.days || []).forEach(day => {
+            if (!isPullDayName(day.name || '')) return;
+            const exs = day.exercises || [];
+            const where = `${sub} spm=${spm} inj=[${inj}] ${day.name}`;
+            if (!exs.some(e => G.isPullUpEx(e.name))) missing.push(where);
+            else if (!G.isPullUpEx(exs[0].name)) notFirst.push(`${where}: ${exs[0].name}`);
+          });
+        });
+      });
+    });
+    check('no pull day in a 6-day hypertrophy program is generated without a pull-up',
+      missing.length === 0, missing.slice(0, 3).join(' ; '));
+    check('…and the pull-up is always the first exercise on the day',
+      notFirst.length === 0, notFirst.slice(0, 3).join(' ; '));
+  }
+
+  // Guard the seed itself: a reordering edit to the pool must fail here, not in the app.
+  {
+    const seed = rawScript.slice(rawScript.indexOf("key==='hypertrophy-balanced'"));
+    const pullB = seed.slice(seed.indexOf("d('Day 5 — Pull B'"), seed.indexOf("d('Day 6 — Legs B'"));
+    check('the balanced 6-day pool authors Pull B with Weighted Pull-ups first',
+      pullB.indexOf("pw('Weighted Pull-ups'") >= 0 &&
+      pullB.indexOf("pw('Weighted Pull-ups'") < pullB.indexOf("pw('Cable Row'"));
+  }
+}
+
+// ── Section: a shoulder injury substitutes incline pressing to DUMBBELLS ─────
+// Henrik, 2026-08-22: "if Shoulder injury, replace Incline Machine Press with Incline DB
+// Press. Even the incline machine puts too much stress on the shoulder, DB incline press is
+// much better." The shoulders condition used to suggest 'Incline Machine Press' — a name that
+// existed nowhere else in the app (no catalogue entry, no splits), so the substitution also
+// produced an exercise the pickers could not offer.
+console.log('\n── Shoulders injury → Incline DB Press ────────────────────');
+{
+  const sh = (G.REHAB_CONDITIONS || []).find(c => c.id === 'shoulders');
+  check('the shoulders condition is defined', !!sh);
+
+  check('Incline Bench Press becomes Incline DB Press',
+    sh.suggest('Incline Bench Press') === 'Incline DB Press', sh.suggest('Incline Bench Press'));
+  check('any incline press variant goes to dumbbells',
+    ['Incline Barbell Press', 'Smith Incline Press', 'Incline DB Bench Press']
+      .every(n => sh.suggest(n) === 'Incline DB Press'));
+  check('nothing is substituted to the old orphan name',
+    !/Incline Machine Press/.test(rawScript));
+
+  // The safe target must never be treated as the aggravating movement
+  check('Incline DB Press is not detected as a shoulder aggravator',
+    sh.detect('Incline DB Press') === false);
+  check('…and it is left alone by the substitution helpers',
+    G._legdaySafeName('Incline DB Press', ['shoulders']) === 'Incline DB Press');
+  check('an incline barbell press is still detected',
+    sh.detect('Incline Bench Press') === true);
+
+  // The other mappings are untouched
+  check('flat bench still becomes Chest Machine Press',
+    sh.suggest('Bench Press') === 'Chest Machine Press');
+  check('overhead pressing still becomes Landmine Press',
+    sh.suggest('Overhead Press') === 'Landmine Press' && sh.suggest('Arnold Press') === 'Landmine Press');
+
+  // The substituted name must be a real catalogue exercise, unlike the one it replaced
+  check('Incline DB Press is offered by the exercise picker',
+    G.EX_OPTS_HTML.indexOf('<option>Incline DB Press</option>') >= 0);
+
+  // End to end through the generator
+  {
+    let machine = [], missingDb = [], dupes = [];
+    [['hypertrophy','balanced'], ['hypertrophy','upper'], ['strength','pure'], ['aesthetic','fullbody']]
+      .forEach(([goal, sub]) => {
+        [4, 6].forEach(nDays => {
+          const inj = G._generateWorkoutProgram(goal, sub, nDays, 'Inj', 16, ['shoulders']);
+          const clean = G._generateWorkoutProgram(goal, sub, nDays, 'Clean', 16, []);
+          const names = d => (d.exercises || []).map(e => e.name);
+          const injNames = inj.days.flatMap(names);
+          const where = `${goal}/${sub} ${nDays}d`;
+          if (injNames.some(n => /Incline Machine/i.test(n))) machine.push(where);
+          if (clean.days.flatMap(names).some(n => /^Incline (Bench|Barbell) Press$/i.test(n)) &&
+              !injNames.includes('Incline DB Press')) missingDb.push(where);
+          inj.days.forEach(d => { const n = names(d); if (new Set(n).size !== n.length) dupes.push(`${where} ${d.name}`); });
+        });
+      });
+    check('no shoulder-injury program is generated with a machine incline press',
+      machine.length === 0, machine.join(' ; '));
+    check('a pool that had an incline barbell press gets Incline DB Press instead',
+      missingDb.length === 0, missingDb.join(' ; '));
+    check('the substitution never collides into a duplicate on the same day',
+      dupes.length === 0, dupes.join(' ; '));
+  }
+
+  // Without the injury nothing changes
+  {
+    const clean = G._generateWorkoutProgram('hypertrophy', 'balanced', 6, 'Clean', 16, []);
+    const names = clean.days.flatMap(d => (d.exercises || []).map(e => e.name));
+    check('without a shoulders injury the incline barbell press is untouched',
+      names.includes('Incline Bench Press'));
+  }
 }
 
 console.log(`  ${passed} passed  ${failed} failed  ${passed + failed} total`);
