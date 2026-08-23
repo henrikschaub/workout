@@ -5443,5 +5443,96 @@ console.log('\n── Shoulders injury → Incline DB Press ──────�
   }
 }
 
+// ── Section: a swap with nothing logged can be saved to the program ──────────
+// Henrik, 2026-08-22: "If an exercise is swapped out in Log Workout AND zero reps been
+// entered, show a pop-up asking if this substitution should be saved permanently to the
+// active program." Stored programs are otherwise never mutated (rule 2026-07-15) — this is
+// the one path that writes to one, and only after the user answers OK.
+console.log('\n── Swap → save the substitution to the program ────────────');
+{
+  const _savedProgs = G._programs, _savedIdx = G._activeProgramIndex, _savedConfirm = G.confirm;
+  const _savedStore = G.localStorage.getItem('workout_programs');
+  let prompts = [];
+  const mkProgram = () => ([{ name: 'P', days: [
+    { name: 'Day 1 — Push', exercises: [ { name: 'Bench Press', sets: '8-8-8', kg: 80 }, { name: 'Overhead Press', sets: '10-10', kg: 40 } ] },
+    { name: 'Day 2 — Pull', exercises: [ { name: 'Pull-ups', sets: 'max', kg: 0 }, { name: 'Barbell Row', sets: '8-8-8', kg: 70 } ] } ] }]);
+  const useDay = (n) => { _idStore['structured-log'] = { dataset: { logDay: String(n) } }; _idStore['log-day'] = { value: String(n) }; };
+  const mkCard = (exIdx, custom) => ({ dataset: custom ? { custom: 'true', exIdx: String(exIdx) } : { exIdx: String(exIdx) } });
+  G.confirm = (msg) => { prompts.push(msg); return true; };
+
+  // Accepting rewrites the exercise in the ACTIVE program's day
+  G._programs = mkProgram(); G._activeProgramIndex = 0; useDay(1); prompts = [];
+  {
+    const ok = G._offerProgramSubstitution(mkCard(1), 'Landmine Press');
+    check('accepting the prompt reports the substitution was saved', ok === true);
+    check('the program day gets the new exercise',
+      G._programs[0].days[0].exercises[1].name === 'Landmine Press',
+      G._programs[0].days[0].exercises[1].name);
+    check('the other exercises on the day are untouched',
+      G._programs[0].days[0].exercises[0].name === 'Bench Press');
+    check('the other days are untouched',
+      G._programs[0].days[1].exercises.map(e => e.name).join(',') === 'Pull-ups,Barbell Row');
+    check('the prescription and weight are left alone — only the name changes',
+      G._programs[0].days[0].exercises[1].sets === '10-10' && G._programs[0].days[0].exercises[1].kg === 40);
+    check('the prompt names the day and both exercises',
+      /Day 1 — Push/.test(prompts[0]) && /Overhead Press/.test(prompts[0]) && /Landmine Press/.test(prompts[0]),
+      prompts[0]);
+    const stored = JSON.parse(G.localStorage.getItem('workout_programs') || '{}');
+    check('the change is persisted, not just held in memory',
+      ((((stored.programs || [])[0] || {}).days || [])[0] || {}).exercises[1].name === 'Landmine Press');
+  }
+
+  // The logged day decides which day is edited
+  G._programs = mkProgram(); useDay(2); prompts = [];
+  {
+    G._offerProgramSubstitution(mkCard(1), 'Cable Row');
+    check('the day being logged is the day that changes',
+      G._programs[0].days[1].exercises[1].name === 'Cable Row' &&
+      G._programs[0].days[0].exercises[1].name === 'Overhead Press');
+  }
+
+  // Declining changes nothing
+  G._programs = mkProgram(); useDay(1); G.confirm = () => false;
+  {
+    const ok = G._offerProgramSubstitution(mkCard(0), 'Chest Machine Press');
+    check('declining reports nothing was saved', ok === false);
+    check('declining leaves the program exactly as it was',
+      G._programs[0].days[0].exercises[0].name === 'Bench Press');
+  }
+
+  // Cards that are not part of the program never even ask
+  G.confirm = (msg) => { prompts.push(msg); return true; };
+  G._programs = mkProgram(); useDay(1); prompts = [];
+  {
+    check('a custom card added mid-session does not offer to change the program',
+      G._offerProgramSubstitution(mkCard(0, true), 'Cable Fly') === false);
+    check('a card with no template index does not either',
+      G._offerProgramSubstitution({ dataset: {} }, 'Cable Fly') === false);
+    check('an index past the end of the day is ignored',
+      G._offerProgramSubstitution(mkCard(9), 'Cable Fly') === false);
+    check('swapping to the exercise already in the program is not worth asking about',
+      G._offerProgramSubstitution(mkCard(0), 'Bench Press') === false);
+    check('none of those showed a pop-up', prompts.length === 0, prompts.join(' | '));
+  }
+
+  // Wiring — the offer belongs to the zero-reps branch only
+  {
+    const fn = String(G.swapExercise || '');
+    check('swapExercise offers the program change after a rename-in-place swap',
+      fn.includes('_offerProgramSubstitution(card,this.value)'));
+    check('…and never on the branch that kept completed sets',
+      fn.indexOf('_addSwapCardAfter') < fn.indexOf('_offerProgramSubstitution') &&
+      /_addSwapCardAfter\([^)]*\);scheduleDraft\(\);return;/.test(fn));
+    const off = String(G._offerProgramSubstitution || '');
+    check('the program write goes through savePrograms, so the backend gets it too',
+      off.includes('savePrograms()') && !off.includes('setData('));
+  }
+
+  G._programs = _savedProgs; G._activeProgramIndex = _savedIdx; G.confirm = _savedConfirm;
+  if (_savedStore === null) G.localStorage.removeItem('workout_programs');
+  else G.localStorage.setItem('workout_programs', _savedStore);
+  delete _idStore['structured-log']; delete _idStore['log-day'];
+}
+
 console.log(`  ${passed} passed  ${failed} failed  ${passed + failed} total`);
 process.exit(failed === 0 ? 0 : 1);
