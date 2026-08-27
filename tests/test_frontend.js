@@ -1550,8 +1550,12 @@ check('pollPromoteStatus times out at attempt>100 (not 60 or 200)',
   rawScript.includes('attempt>100') && !rawScript.includes('attempt>60'));
 check('pollPromoteStatus re-enables button on timeout',
   /attempt>100\b[^}]*btn\.disabled=false/.test(rawScript));
-check('pollPromoteStatus shows red on timeout (#ef4444)',
-  rawScript.slice(rawScript.indexOf('attempt>100'), rawScript.indexOf('attempt>100')+400).includes('ef4444'));
+// The red now comes from _recordPushFailure, which both renders it and PERSISTS the
+// failure (2026-08-27) — the timeout path hands off to it instead of writing its own markup.
+check('pollPromoteStatus reports the timeout through the persisting failure path',
+  rawScript.slice(rawScript.indexOf('attempt>100'), rawScript.indexOf('attempt>100')+400).includes('_recordPushFailure'));
+check('…and that path renders in red (#ef4444)',
+  String(G._recordPushFailure || '').includes('ef4444'));
 check('pollPromoteStatus includes "Timed out" message',
   rawScript.includes('Timed out'));
 check('pollPromoteStatus resets _pollErrs=0 on successful response',
@@ -5648,9 +5652,222 @@ console.log('\n── Standard machine exercises ──────────�
       Object.keys(G.getExSplits(n)).filter(k => k !== 'cable' && k !== 'factor').length === 0);
     check('every exercise in the picker resolves to a muscle group',
       unclassified.length === 0, unclassified.join(', '));
-    check('the catalogue still holds everything it did before, plus the ten machines',
-      opts.length === 60, String(opts.length));
+    // Exact count on purpose: adding or removing an exercise should be a conscious edit here.
+    check('the catalogue holds every exercise it is meant to (61)',
+      opts.length === 61, String(opts.length));
+    check('no exercise is listed twice in the picker',
+      new Set(opts).size === opts.length,
+      opts.filter((n, i) => opts.indexOf(n) !== i).join(', '));
   }
+}
+
+// ── Section: editing a session keeps that session's date ────────────────────
+// Bug (2026-08-24): editLog filled the header (date / day / body weight) and THEN called
+// prefillLog, which ends by resetting the date field to today — and calls restoreDraft, which
+// can write a draft's own date and weight over it too. Editing a three-week-old session
+// therefore saved it under today's date. Not cosmetic: saveLog matches an existing session BY
+// DATE, so the rewritten edit could overwrite the workout actually logged today.
+console.log('\n── Editing a log keeps its own date ───────────────────────');
+{
+  const mkField = (v) => ({ value: v });
+  const setFields = () => {
+    _idStore['log-date'] = mkField('2026-08-24');
+    _idStore['log-day'] = mkField('1');
+    _idStore['log-weight'] = mkField('');
+    return [_idStore['log-date'], _idStore['log-day'], _idStore['log-weight']];
+  };
+
+  check('editLog has a step that restores the session header', typeof G._editRestoreHeader === 'function');
+  if (typeof G._editRestoreHeader === 'function') {
+    const [d, day, w] = setFields();
+    G._editRestoreHeader({ id: 1, date: '2026-07-03', day: 4, weight: 88 });
+    check('the edited session keeps its own date, not today', d.value === '2026-07-03', d.value);
+    check('…its own program day', String(day.value) === '4', String(day.value));
+    check('…and its own body weight', String(w.value) === '88', String(w.value));
+  }
+  if (typeof G._editRestoreHeader === 'function') {
+    const [d, day, w] = setFields();
+    w.value = '90';
+    G._editRestoreHeader({ id: 2, date: '2026-07-03', day: 2 });
+    check('a session logged without a weight does not blank the field',
+      w.value === '90' && d.value === '2026-07-03');
+    check('a missing log is a no-op, not a throw',
+      (() => { try { G._editRestoreHeader(null); return true; } catch (e) { return false; } })());
+  }
+
+  // The ordering IS the fix — restoring before prefillLog is exactly the bug.
+  {
+    const fn = String(G.editLog || '');
+    check('editLog re-applies the log header after prefillLog',
+      fn.indexOf('prefillLog(') < fn.indexOf('_editRestoreHeader(log)') &&
+      fn.indexOf('_editRestoreHeader(log)') > 0);
+    check('prefillLog is still what sets up the cards for the edit', fn.includes('prefillLog(log.day)'));
+    check('editLog still marks the session as an edit before prefilling',
+      fn.indexOf("log-edit-id") < fn.indexOf('prefillLog('));
+  }
+  // The two ways the date got clobbered, both downstream of prefillLog
+  {
+    const pf = String(G.prefillLog || '');
+    check('prefillLog still resets the date to today for a NEW session',
+      pf.includes("document.getElementById('log-date').value=new Date().toISOString().split('T')[0]"));
+    check('…and still hands off to restoreDraft, which can also rewrite the date',
+      pf.includes('restoreDraft(') &&
+      String(G.restoreDraft || '').includes('dateEl.value=d.date'));
+  }
+  // Why it mattered: saveLog finds the session to replace by date
+  check('saveLog still matches an existing session by date (why a wrong date could clobber one)',
+    String(G.saveLog || '').includes('l.date===date'));
+
+  delete _idStore['log-date']; delete _idStore['log-day']; delete _idStore['log-weight'];
+}
+
+// ── Section: weight propagates on ADDED exercises too + Cable Bicep Curl ────
+// Henrik, 2026-08-25: "Adding an exercise doesn't fill all weight fields so I need to add
+// weight for each set. Prefill set 2-n once I added the first. Also a cable biceps curl isn't
+// in the exercise catalog."
+console.log('\n── Weight propagation on added cards / Cable Bicep Curl ───');
+{
+  // A card the way the app builds one: kg inputs live in .sets-row, and an ADDED card has no
+  // data-ex / data-set attributes at all — that is exactly why propagation used to miss it.
+  const mkCard = (vals, withAttrs) => {
+    const inputs = vals.map((v, i) => ({
+      value: String(v),
+      dataset: withAttrs ? { ex: '0', set: String(i), type: 'kg' } : { type: 'kg' },
+      closest: () => card,
+    }));
+    const sr = { querySelectorAll: sel => (sel.includes('kg') ? inputs : []) };
+    const card = { _inputs: inputs, querySelector: sel => (sel === '.sets-row' ? sr : null) };
+    return card;
+  };
+
+  {
+    const card = mkCard(['17.5', '', ''], false);   // the reported case
+    card._inputs[0].value = '17.5';
+    G.propagateWeight(card._inputs[0]);
+    check('typing the first weight on an added exercise fills the later sets',
+      card._inputs.map(i => i.value).join(',') === '17.5,17.5,17.5',
+      card._inputs.map(i => i.value).join(','));
+  }
+  {
+    const card = mkCard(['20', '20', '20'], false);
+    card._inputs[1].value = '25';
+    G.propagateWeight(card._inputs[1]);
+    check('a mid-set change still only fills forward on an added exercise',
+      card._inputs.map(i => i.value).join(',') === '20,25,25',
+      card._inputs.map(i => i.value).join(','));
+  }
+  {
+    const card = mkCard(['60', '60', '60'], true);  // a template card
+    card._inputs[0].value = '70';
+    G.propagateWeight(card._inputs[0]);
+    check('a template card propagates the same way', card._inputs.map(i => i.value).join(',') === '70,70,70');
+  }
+  {
+    const card = mkCard(['40'], false);
+    check('a single-set card does not throw',
+      (() => { try { G.propagateWeight(card._inputs[0]); return true; } catch (e) { return false; } })());
+    check('propagateWeight ignores a null input',
+      (() => { try { G.propagateWeight(null); return true; } catch (e) { return false; } })());
+  }
+
+  // The wiring: the boxes have to CALL it — an added card's three seeded boxes and every
+  // box created by "+ set".
+  {
+    const add = String(G.addCustomExercise || '');
+    check('an added exercise renders its kg boxes with the propagation handler',
+      /data-type="kg" oninput="propagateWeight\(this\)"/.test(add));
+    const addSet = String(G.addSetToCard || '');
+    check('a box created by "+ set" propagates too',
+      /data-type="kg" oninput="propagateWeight\(this\)"/.test(addSet));
+    check('"+ set" still seeds the new box from the last one',
+      addSet.includes("value=\"'+lastKg+'\""));
+  }
+
+  // Cable Bicep Curl
+  {
+    const arms = G.EX_OPTS_HTML.slice(G.EX_OPTS_HTML.indexOf('label="Arms"'));
+    check('Log Workout offers Cable Bicep Curl under Arms',
+      arms.includes('<option>Cable Bicep Curl</option>'));
+    const fn = String(G._exOpts || '');
+    check('the program editor offers it too',
+      fn.slice(fn.indexOf("'Arms':")).includes("'Cable Bicep Curl'"));
+    check('it counts as arm volume',
+      JSON.stringify(G.getExSplits('Cable Bicep Curl')) === JSON.stringify({ arms: 1 }),
+      JSON.stringify(G.getExSplits('Cable Bicep Curl')));
+    check('…and is recognised as a cable exercise, so it gets the cable gearing buttons',
+      G.isCableEx('Cable Bicep Curl'));
+    check('the machine curl is still NOT a cable exercise', !G.isCableEx('Bicep Curl Machine'));
+  }
+}
+
+// ── Section: a failed Push to Prod stays on screen ──────────────────────────
+// Henrik, 2026-08-27: "the text is only visible for a split second, could you write this to a
+// log or make it persist on screen?" The failure line carries GitHub's own status code, which
+// is the whole diagnosis — losing it to the next re-render made the failure undiagnosable.
+console.log('\n── Push to Prod failures persist ──────────────────────────');
+{
+  const _saved = G.localStorage.getItem('wk-last-push');
+  const mkEl = () => ({ _html: '', get innerHTML() { return this._html; }, set innerHTML(v) { this._html = v; } });
+
+  check('there is a failure-recording step at all', typeof G._recordPushFailure === 'function');
+  if (typeof G._recordPushFailure === 'function') {
+    const el = mkEl();
+    G._recordPushFailure('Failed', 'HTTP 401 — {"message":"Bad credentials"}', el);
+    const rec = JSON.parse(G.localStorage.getItem('wk-last-push') || 'null');
+    check('the failure is written to the persisted last-push record', !!rec && rec.conclusion === 'failure');
+    check('…with the full error text, status code and all',
+      !!rec && /HTTP 401/.test(rec.error) && /Bad credentials/.test(rec.error), rec && rec.error);
+    check('…and a timestamp, so a later look still says when it happened',
+      !!rec && !isNaN(Date.parse(rec.ts)));
+    check('the message is also shown immediately, in red',
+      el.innerHTML.includes('HTTP 401') && el.innerHTML.includes('ef4444'));
+    check('…and wraps rather than truncating a long GitHub body',
+      /white-space:pre-wrap/.test(el.innerHTML) && /word-break:break-word/.test(el.innerHTML));
+    check('…and can be selected to copy',  /user-select:text/.test(el.innerHTML));
+    check('the Actions link is offered alongside it', el.innerHTML.includes('/actions'));
+  }
+
+  // Rendered back from storage — this is what survives the re-render that used to wipe it
+  {
+    const el = mkEl();
+    _idStore['push-to-prod-last'] = el;
+    G.localStorage.setItem('wk-last-push', JSON.stringify({
+      ts: new Date().toISOString(), conclusion: 'failure',
+      error: 'Failed: HTTP 403 — {"message":"Resource not accessible by personal access token"}',
+      steps: [], prUrl: null, runUrl: null, stagingVer: '1.226', prodVer: null }));
+    G.buildLastPushDropdown();
+    check('a re-render brings the error back from storage',
+      el.innerHTML.includes('HTTP 403') && el.innerHTML.includes('not accessible'));
+    check('the row opens itself when the last push failed, so it is on screen unprompted',
+      /<details open>/.test(el.innerHTML), el.innerHTML.slice(0, 60));
+    check('it still marks the attempt as failed', el.innerHTML.includes('✗'));
+  }
+
+  // A successful push must not sprout an error row or force itself open
+  {
+    const el = mkEl();
+    _idStore['push-to-prod-last'] = el;
+    G.localStorage.setItem('wk-last-push', JSON.stringify({
+      ts: new Date().toISOString(), conclusion: 'success', steps: [{ name: 'promote', status: 'completed', conclusion: 'success' }],
+      prUrl: 'https://github.com/x/y/pull/1', runUrl: null, stagingVer: '1.226', prodVer: '1.217' }));
+    G.buildLastPushDropdown();
+    check('a successful push renders no error line', !/ef4444/.test(el.innerHTML));
+    check('…and stays collapsed as before', /<details>/.test(el.innerHTML));
+  }
+
+  // Every failure path routes through the persisting helper
+  {
+    check('a rejected dispatch persists its error',
+      String(G.pushToProd || '').includes("_recordPushFailure('Failed',e.message,statusEl)"));
+    const poll = String(G.pollPromoteStatus || '');
+    check('a timeout persists its error', poll.includes("_recordPushFailure('Timed out"));
+    check('a lost connection persists its error', poll.includes("_recordPushFailure('Connection lost'"));
+    check('no failure path writes throwaway text into the status element any more',
+      !/statusEl\.textContent='Failed: '/.test(rawScript));
+  }
+
+  if (_saved === null) G.localStorage.removeItem('wk-last-push'); else G.localStorage.setItem('wk-last-push', _saved);
+  delete _idStore['push-to-prod-last'];
 }
 
 console.log(`  ${passed} passed  ${failed} failed  ${passed + failed} total`);
