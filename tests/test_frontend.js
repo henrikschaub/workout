@@ -1896,6 +1896,80 @@ console.log('\n── BF% backend sync — save, delete, load ──────
     src.includes('toUpload') && src.includes('pushBodyCompToAgent(e.date,e.bf)'));
 }
 
+// ── A reading deleted in the other app stays deleted here ────────────────────
+// bodycomp.json is SHARED: data_registry files it under the workout file set, and
+// prod Peptide Tracker and prod Workout both live in the default namespace, so the
+// two apps read and write the same rows for the same person and each keeps its own
+// local copy.
+//
+// syncBodyCompFromAgent's rule for a row the server does not have was "upload it",
+// which cannot tell "not synced yet" from "deleted on the other device". 2026-09-05:
+// Henrik deleted the 2026-07-22 reading in Peptide Tracker; this app's bf_log still
+// had it, saw it missing, and POSTed it straight back, every launch.
+//
+// The backend now refuses that replay, but refusing is not the same as this app
+// being right — the stale row was still in bf_log, still in BF history here, and
+// still went out on every sync to be turned away. These tests pin the prune, and
+// the line it must not cross: a row the server has simply never seen is still the
+// user's data and still gets uploaded.
+console.log('\n── BF% — a reading deleted elsewhere stays deleted ────────');
+{
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+  check('the sync asks for tombstones, or it cannot see a delete at all',
+    src.includes("'/bodycomp?include_deleted=true'"));
+  check('  …and keeps them out of the merged list',
+    /const remote=all\.filter\(function\(e\)\{return!e\.deleted;\}\)/.test(src));
+
+  // Behavioural: drive the real function against a stubbed backend.
+  const _sv = {fetch:G.fetch, auth:G.authHeaders, bfLog:G.bfLog};
+  const _seen = [];
+  const _remoteRows = [
+    {date:'2026-07-22', bf:10.0, deleted:true, deleted_at:'2026-09-05T12:00:00+00:00'},
+    {date:'2026-08-08', bf:14.2},
+  ];
+  G.authHeaders = (extra) => Object.assign({Authorization:'Bearer x'}, extra || {});
+  G.fetch = async (url, opts) => {
+    _seen.push({url:String(url), method:(opts && opts.method) || 'GET',
+                body:(opts && opts.body) || ''});
+    if ((opts && opts.method) === 'POST') return {ok:true, status:200, json:async()=>({ok:true})};
+    return {ok:true, status:200, json:async()=>_remoteRows};
+  };
+  // What the phone actually holds: the deleted row, a row the server also has, and
+  // one logged here that has never reached the server.
+  G.localStorage.setItem('bf_log', JSON.stringify([
+    {date:'2026-07-22', bf:10.0},
+    {date:'2026-08-08', bf:14.2},
+    {date:'2026-09-01', bf:13.9},
+  ]));
+
+  G.syncBodyCompFromAgent().then(function(){
+    const stored = JSON.parse(G.localStorage.getItem('bf_log') || '[]');
+    const dates = stored.map(e => e.date);
+    check('the deleted reading is dropped from local storage',
+      dates.indexOf('2026-07-22') === -1, 'bf_log: [' + dates.join(',') + ']');
+    check('  …and from the in-memory list the history renders from',
+      (G.bfLog || []).every(e => e.date !== '2026-07-22'),
+      'bfLog: [' + (G.bfLog || []).map(e => e.date).join(',') + ']');
+    // The whole reason it kept coming back.
+    check('  …and is never uploaded again',
+      !_seen.some(c => c.method === 'POST' && c.body.indexOf('2026-07-22') !== -1),
+      _seen.filter(c => c.method === 'POST').map(c => c.body).join(' | ') || 'no POST');
+
+    // The line the prune must not cross. A row the server has never seen is the
+    // user's data — often a reading logged while offline — and still goes up.
+    check('a local-only reading is still uploaded',
+      _seen.some(c => c.method === 'POST' && c.body.indexOf('2026-09-01') !== -1),
+      _seen.filter(c => c.method === 'POST').map(c => c.body).join(' | ') || 'no POST');
+    check('  …and rows the server still has survive untouched',
+      dates.indexOf('2026-08-08') !== -1 && dates.indexOf('2026-09-01') !== -1,
+      'bf_log: [' + dates.join(',') + ']');
+    check('  …with the tombstone itself never rendered as a reading',
+      stored.every(e => !e.deleted));
+
+    G.fetch = _sv.fetch; G.authHeaders = _sv.auth; G.bfLog = _sv.bfLog;
+  });
+}
+
 // ── 47b. BF% pre-isolation migration ─────────────────────────────────────────
 console.log('\n── 47b. BF% pre-isolation migration ────────────────────────────────');
 {
@@ -5870,5 +5944,14 @@ console.log('\n── Push to Prod failures persist ─────────�
   delete _idStore['push-to-prod-last'];
 }
 
-console.log(`  ${passed} passed  ${failed} failed  ${passed + failed} total`);
-process.exit(failed === 0 ? 0 : 1);
+// Deferred until the microtask queue drains. This suite is synchronous apart from
+// the BF% prune block, which drives the real async syncBodyCompFromAgent against a
+// stubbed backend — its .then callback is a microtask and only runs after this pass
+// finishes. Calling process.exit() here killed the process first, so those checks
+// silently did not run AND did not appear in the total: the suite reported all green
+// while six assertions had never executed. setImmediate fires after the microtask
+// queue is empty, so the summary counts them.
+setImmediate(() => {
+  console.log(`  ${passed} passed  ${failed} failed  ${passed + failed} total`);
+  process.exit(failed === 0 ? 0 : 1);
+});
